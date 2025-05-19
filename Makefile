@@ -1,16 +1,16 @@
 # Compilador y flags
-CC = gcc
+CC = g++
 CFLAGS = -Wall -Wextra -Iinclude -MMD
 
 # Directorios
 SRC_DIR = src
 BUILD_DIR = build
 INCLUDE_DIR = include
-TARGET = $(BUILD_DIR)/mega
+TARGET = $(BUILD_DIR)/megaNew
 
 # Archivos fuente, objetos y dependencias
-SRC = $(wildcard $(SRC_DIR)/*.c)
-OBJ = $(SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
+SRC = $(wildcard $(SRC_DIR)/*.cpp)
+OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 DEPS = $(OBJ:.o=.d)
 
 # Regla principal
@@ -20,8 +20,8 @@ all: $(TARGET)
 $(TARGET): $(OBJ)
 	$(CC) $(OBJ) -o $@
 
-# Compilación de cada archivo .c a .o, generando también archivos .d
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+# Compilación de cada archivo .cpp a .o, generando también archivos .d
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Incluir dependencias de headers
@@ -29,7 +29,6 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 
 # Limpieza total
 clean:
-	@if exist build (del /s /q build\*.* > nul 2>&1)
-
+	rm -rf build/*
 .PHONY: all clean
 
