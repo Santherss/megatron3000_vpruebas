@@ -30,5 +30,8 @@ void procesarLinea(char *str, char *linea[],char separador='#');
 
 char * quitarEspacios(char *str);
 
+const char* tipo_dato(char *campo);
+
+
 
 #endif

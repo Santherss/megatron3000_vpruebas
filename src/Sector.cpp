@@ -71,7 +71,7 @@ bool Sector::leer_sector(string& str, string rut){
 }
 
 bool Sector::esta_lleno(string rut){
-    rut = ruta_base + "\\"+ rut;
+    rut = ruta_base + "/"+ rut;
     const char * ruta = rut.c_str();
     FILE * file_sector = fopen(ruta,"rb");
     if (!file_sector) {

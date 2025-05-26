@@ -1,4 +1,5 @@
 #include "generales.h"
+#include <ctype.h>
 
 const char *palabras_reservadas[] = {"HELP","SELECT","FROM","WHERE","|","CREATE","INSERT",NULL};
 const char *palabras_adicionales[] = {"REPORTE","CREATE-DISCO","SELECT-DISCO",NULL};
@@ -15,7 +16,7 @@ int tamano(char * str, char separador){
     while (str[i] && str[i]!=separador){
         i++;
     }
-    return i++;
+    return i;
 }
 
 bool compararTotal(char * a, char * b){
@@ -59,7 +60,7 @@ char *mayusculas(char *origen, char *destino) {
     for ( i = 0; origen[i]; ++i) {
         destino[i] = (origen[i] >= 'a' && origen[i] <= 'z') ? origen[i] - 32 : origen[i];
     }
-    destino[i-1] = '\0';
+    destino[i] = '\0';
     return destino;
 }
 
@@ -80,29 +81,25 @@ void procesarLinea(char *str, char *linea[], char separador) {
     char *p = str;
 
     while (*p) {
-        // Saltar espacios iniciales
         while (*p == ' ') p++;
 
         char *inicio = p;
         char *fin = p;
 
         if (*p == '"') {
-            // Campo entre comillas
-            p++;             // Saltar comilla inicial
+            p++;             
             inicio = p;
             while (*p && *p != '"') p++;
             fin = p;
-            if (*p == '"') p++; // Saltar comilla final si existe
+            if (*p == '"') p++; 
         } else {
-            // Campo sin comillas
             inicio = p;
             while (*p && *p != separador) {
-                if (*p != ' ') fin = p + 1; // fin apunta después del último caracter no espacio
+                if (*p != ' ') fin = p + 1;
                 p++;
             }
         }
 
-        // Reservar memoria y copiar campo limpio
         int len = fin - inicio;
         if (len > 0) {
             linea[i] = (char *)malloc(len + 1);
@@ -114,7 +111,6 @@ void procesarLinea(char *str, char *linea[], char separador) {
             }
         }
 
-        // Saltar separador si lo hay
         while (*p == ' ' || *p == separador) p++;
     }
 
@@ -132,7 +128,7 @@ char * quitarEspacios(char *str) {
     
     *dest = '\0';
     dest--;
-    while (dest >= inicio && *dest == ' ') {
+    while (dest >= inicio && (*dest == ' '||*dest == '\n')) {
         *dest-- = '\0';
     }
     return inicio;
@@ -142,3 +138,22 @@ char * quitarEspacios(char *str) {
 
 }
  */
+const char* tipo_dato(char *campo) {
+    if (!campo || campo[0] == '\0') return "string";  // vacío se trata como string
+
+    int i = 0;
+    bool tienePunto = false;
+
+    while (campo[i]) {
+        if (isdigit(campo[i])) {
+            i++;
+        } else if (campo[i] == '.' && !tienePunto) {
+            tienePunto = true;
+            i++;
+        } else {
+            return "string";  // cualquier otra cosa => string
+        }
+    }
+
+    return tienePunto ? "float" : "int";
+}
