@@ -48,7 +48,7 @@ bool Sector::modificar_sector(const char * str, string rut){
     }
     fprintf(file_sector,str);
     fclose(file_sector);
-    //printf("[+] Se escribio en %s\n", ruta);
+    //printf("[+] modificar_sector: Se escribio en %s\n", ruta);
     return 1;
 }
 
@@ -75,12 +75,12 @@ bool Sector::esta_lleno(string rut){
     const char * ruta = rut.c_str();
     FILE * file_sector = fopen(ruta,"rb");
     if (!file_sector) {
-        printf("[-] No existe sector %s\n", ruta);
+        printf("[-] esta_lleno: No existe sector %s\n", ruta);
         return 0;
     }
     int c = fgetc(file_sector);  // Leer un solo byte
     fclose(file_sector);
-
+    //printf("paso en esta_lleno\n");
     return c != EOF; 
 }
 

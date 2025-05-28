@@ -9,13 +9,13 @@
 
 
 
-bool campos_create(char *str, char *nombre_tabla, char *archivo, char *separador) {
+bool campos_create_tabla(char *str, char *nombre_tabla, char *archivo, char *separador) {
     str += tamano((char *)"CREATE");
     while (*str == ' ') str++;
 
     int i = 0;
     while (*str && *str != ' ') nombre_tabla[i++] = *str++;
-    nombre_tabla[i] = '\n';
+    nombre_tabla[i] = '\0';
 
     while (*str == ' ') str++;
     i = 0;
@@ -33,7 +33,7 @@ bool campos_create(char *str, char *nombre_tabla, char *archivo, char *separador
 
 bool crear_tabla(char *str, DiscoFisico *disk) {
     char nombre[32], archivo[64], sep;
-    if (!campos_create(str, nombre, archivo, &sep)) {
+    if (!campos_create_tabla(str, nombre, archivo, &sep)) {
         write(1, "ERROR: parámetros inválidos\n", 28);
         return false;
     }
@@ -43,8 +43,64 @@ bool crear_tabla(char *str, DiscoFisico *disk) {
     // Buscar sector libre desde (0,0,0,1)
     unsigned int d = 0, p = 0, s = 1;
     int c = 0;
-    return insertar_tabla(archivo, sep, disk, d, c, p, s);
+    return insertar_tabla(archivo, sep, disk, d, c, p, s,nombre);
 }
+
+bool procesar_select(char * str, char* mayus, DiscoFisico * mydisk) {
+    int from_pos = buscar((char *)"FROM", mayus);
+    if (from_pos == -1) {
+        write(1, "Error: sintaxis incorrecta\n", 27);
+        return true;
+    }
+    char *columnas_str = str + 6; // después de SELECT
+    columnas_str[from_pos - 6] = '\0'; // terminamos columnas antes de FROM
+    char *columnas = quitarEspacios(columnas_str);
+    
+    char *tabla_str = str + from_pos + 4;
+    tabla_str = quitarEspacios(tabla_str);
+
+    int pipe_pos = buscar((char *)"|", tabla_str);
+    char *archivo_salida = NULL;
+    if (pipe_pos != -1) {
+        archivo_salida = quitarEspacios(tabla_str + pipe_pos + 1);
+        tabla_str[pipe_pos] = '\0'; 
+    }
+    
+    int where_pos = buscar((char *)"WHERE", mayus);
+    char *condiciones = NULL;
+    if (where_pos != -1) {
+        condiciones = quitarEspacios(str + where_pos + 5);
+        tabla_str[where_pos - from_pos - 4] = '\0';
+    }
+    
+    char *tabla = quitarEspacios(tabla_str);
+    
+    if (buscarEsquema(tabla_str)){
+        char linea[80];
+        if (compararTotal(columnas,"*")){
+            //printf("pp\n");
+            //char * conteido=(char*) mydisk->leer(0,0,0,1).c_str();
+            std::string conteido= mydisk->leer(0,0,0,1);
+            //conteido[15] = '\0';
+            //write(1,conteido.c_str(),tamano((char*)conteido.c_str()));            
+            for(char c: conteido)
+                if (c=='#'){
+                    putchar(' ');
+                    putchar('|');
+                    putchar(' ');
+                } else
+                    putchar(c);
+        }
+        
+    } else  
+        write(1,"[-] No hay relacion en esquema\n",31);
+    
+
+    return true;
+}
+
+
+
 
 // -------------------CONSULTA-------------------
 
@@ -107,86 +163,11 @@ int procesar_consulta(char * str, DiscoFisico * mydisk){
     }
 
     if(buscar((char *)palabras_reservadas[1],mayus)==0){ //SELECT
-        
-        printf("select\n");
-        
-        int pos_select = buscar((char*)"SELECT", mayus);
-        if (pos_select != 0) {
-            write(1, "Comando no reconocido o mal formado\n", 36);
-            return 1;
-        }
+        //printf("%s\n",ruta_base.c_str());
 
-        int pos_from = buscar((char*)"FROM", mayus);
-        if (pos_from == -1) {
-            write(1, "ERROR: falta FROM\n", 18);
-            return 1;
-        }
-
-        // Extraer columnas
-        char columnas[256] = {0};
-        int i = 0;
-        for (int j = pos_select + 6; j < pos_from && str[j]; ++j) {
-            if (str[j] != ' ') columnas[i++] = str[j];
-        }
-        columnas[i] = 0;
-
-        // Extraer tabla
-        i = 0;
-        int j = pos_from + 4;
-        while (str[j] == ' ') ++j;
-
-        char tabla[128] = {0};
-        while (str[j] && str[j] != ' ' && str[j] != '\n' && str[j] != '|') {
-            tabla[i++] = str[j++];
-        }
-        tabla[i] = 0;
-
-        // Buscar WHERE si existe
-        int pos_where = buscar((char*)"WHERE", mayus);
-        char condicion[256] = {0};
-        if (pos_where != -1) {
-            i = 0;
-            j = pos_where + 5;
-            while (str[j] == ' ') ++j;
-            while (str[j] && str[j] != '|') condicion[i++] = str[j++];
-            condicion[i] = 0;
-        }
-
-        // Buscar archivo destino con '|'
-        /* char archivo[128] = {0};
-        char * ptr_pipe = (char*)strchr(str, '|');
-        if (ptr_pipe) {
-            ptr_pipe++; // Saltar el '|'
-            while (*ptr_pipe == ' ') ++ptr_pipe;
-            i = 0;
-            while (*ptr_pipe && *ptr_pipe != '\n') archivo[i++] = *ptr_pipe++;
-            archivo[i] = 0;
-        } */
-        char archivo[128] = {0};
-        int pos_pipe = buscar((char *)"|", str);
-        if (pos_pipe != -1) {
-            char *p = str + pos_pipe + 1; // avanzar después del '|'
-            while (*p == ' ') ++p; // saltar espacios
-            int i = 0;
-            while (*p && *p != '\n') {
-                archivo[i++] = *p++;
-            }
-            archivo[i] = 0;
-        }
-        // Mostrar resultados parseados
-        write(1, "CONSULTA SELECT DETECTADA\n", 26);
-        write(1, "Columnas: ", 10); write(1, columnas, tamano(columnas)); write(1, "\n", 1);
-        write(1, "Tabla: ", 7); write(1, tabla, tamano(tabla)); write(1, "\n", 1);
-        if (pos_where != -1) {
-            write(1, "Condición: ", 11); write(1, condicion, tamano(condicion)); write(1, "\n", 1);
-        }
-        if (pos_pipe) {
-            write(1, "Archivo destino: ", 17); write(1, archivo, tamano(archivo)); write(1, "\n", 1);
-        }
-
-
-
+        procesar_select(str,mayus, mydisk);
         return 1;
+        
         //procesar_select()
     } 
     if (buscar((char*)palabras_reservadas[6],mayus)==0){ //insert <registro>
@@ -194,6 +175,13 @@ int procesar_consulta(char * str, DiscoFisico * mydisk){
         
         return 1;
     }
+
+    if (buscar("ESQUEMA",mayus)==0){ // esquema, para ver nuestras relaciones
+        write(1,(char*)(mydisk->leer(0,1,0,0)).c_str(),tamano((char*)mydisk->leer(0,1,0,0).c_str(),'\0'));
+        return 1;   
+    }
+    
+
     if (buscar((char*)palabras_adicionales[0],mayus)==0){ //reporte
         mydisk->reporte();
         //printf("reporanrrr\n");

@@ -1,8 +1,13 @@
 #include "DiscoFisico.h"
 #include "GeneralesFisico.h"
 #include "generales.h"
+#include "archivos.h"
+#include <sys/mman.h>     // mmap, munmap, msync
+#include <sys/stat.h>     // fstat
+#include <fcntl.h>       // open
 //#include "Sector.h"
 #include <filesystem>
+#include <string.h>
 namespace fs = std::filesystem;
 //crea disco desde cero
 
@@ -154,49 +159,112 @@ string DiscoFisico::leer(unsigned int d, int cara, unsigned int p,unsigned int s
     
 }
 
-bool DiscoFisico::escribir(string str, unsigned int d, int cara, unsigned int p,unsigned int s){
+bool DiscoFisico::escribir(char * str, unsigned int d, int cara, unsigned int p,unsigned int s,char*nombre){
+    //printf("si en escribir\n");
     if(discoInicializado()){
         printf("[-]Error: no hay disco seleccionado \n");
         return NULL; 
     }
     Sector my_sector (tam_sector);
     string ruta =  to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);
-    if(my_sector.esta_lleno(ruta)){
-        printf("sector lleno: %s 42\n",ruta.c_str());
-        return false;
+    while(my_sector.esta_lleno(ruta)){
+        //printf("p1\n");
+        if(!avanzar(d,cara,p,s)){
+                write(1,"Disco lleno\n",12);
+                return false;
+            }
+        ruta = to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);
+        //return false;
     }
-    else { 
-        return my_sector.modificar_sector(str.c_str() ,ruta);
+    if (nombre){
+        //if(!buscarRegistroRelacion((char*)ruta.c_str(),nombre))
+        //printf("mandado a registrar enescribir disco %s\n",ruta.c_str());
+        registrarRelacion((char*)ruta.c_str(),nombre);
     }
-    
+    //printf("mandado a escrito en %s\n",ruta.c_str());
+
+    return insertar(str, tamano(str),(char*)ruta.c_str(),nombre);
+    //return my_sector.modificar_sector(str,ruta);
 }
 
-bool DiscoFisico::insertar(char * str, int tam,unsigned int d, int cara, unsigned int p,unsigned int s){
-    //Sector mySector (tam_sector);
+/*
+bool DiscoFisico::escribir(char * str, char * ruta ,char*nombre){
+     //printf("si en escribir\n");
+    if(discoInicializado()){
+        printf("[-]Error: no hay disco seleccionado \n");
+        return NULL; 
+    }
+    Sector my_sector (tam_sector);
+    while(my_sector.esta_lleno(ruta)){
+        //printf("p1\n");
+        if(!avanzar(d,cara,p,s)){
+                write(1,"Disco lleno\n",12);
+                return false;
+            }
+        ruta = to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);
+        //return false;
+    }
+    if (nombre){
+        //if(!buscarRegistroRelacion((char*)ruta.c_str(),nombre))
+        //printf("mandado a registrar enescribir disco %s\n",ruta.c_str());
+        registrarRelacion((char*)ruta.c_str(),nombre);
+    }
+    //printf("mandado a escrito en %s\n",ruta.c_str());
+
+    return insertar(str, tamano(str),(char*)ruta.c_str(),nombre);
+    //return my_sector.modificar_sector(str,ruta);
+} */
+
+bool DiscoFisico::insertar(char * str, int tam, char * ruta,char*nombre){
     if(discoInicializado()){
         printf("[-]Error al leer: no hay disco seleccionado \n");
         return NULL; 
     }
-    string ruta = to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);
-    
-    while(fs::file_size(ruta_base+"/"+ruta)+tamano(str) > tam_sector){
-        //write(1,"sector lleno ",13);
+    printf("funci insertar %s\n",ruta);
+
+    if(fs::file_size(ruta_base+"/"+ruta)+tamano(str) > tam_sector){
+        return false;
+    }
+    /* while(fs::file_size(ruta_base+"/"+ruta)+tamano(str) > tam_sector){
         //write(1, ruta.c_str(), ruta.length());
         //write(1,"\n",1);
-        if(!avanzar(d,cara,p,s))
+        if(!avanzar(d,cara,p,s)){
+            write(1,"Disco lleno\n",12);
             return false;
+        }
         ruta = to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);
-    }
-    
-    FILE * archivo = fopen((ruta_base+"/"+ruta).c_str(),"a");
+    } */
+    string ruta_escribir = ruta_base+"/"+ruta;
+    //char * ruta_escribir= (char*)(ruta_base+"/"+ruta).c_str();
+    FILE * archivo = fopen(ruta_escribir.c_str(),"a");
+    //FILE * archivo = fopen((ruta_base+"/"+ruta).c_str(),"a");
     if(!archivo){
         write(1,"Erro al insertar en ",20);
         return 0;
     }
     write(fileno(archivo),str,tam+1);
-    printf("escrito en %s\n",ruta.c_str());
+    if (nombre){
+        //if(!buscarRegistroRelacion((char*)ruta.c_str(),nombre))
+            registrarRelacion((char*)ruta,nombre);
+    }
+    
+    printf("escrito en %s\n",ruta);
     return 1;
 
+}
+
+bool DiscoFisico::insertar(char * str, int tam,unsigned int d, int cara, unsigned int p,unsigned int s,char*nombre){
+    string ruta = to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);
+    while(fs::file_size(ruta_base+"/"+ruta)+tamano(str) > tam_sector ){
+        //write(1, ruta.c_str(), ruta.length());
+        //write(1,"\n",1);
+        if(!avanzar(d,cara,p,s)){
+            write(1,"Disco lleno\n",12);
+            return false;
+        }
+        ruta = to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);
+    }
+    return insertar(str,tam,(char*)ruta.c_str(),nombre);
 }
 
 bool DiscoFisico::avanzar(unsigned int &di, int &cara, unsigned int &pi, unsigned int &se) {
@@ -215,12 +283,115 @@ bool DiscoFisico::avanzar(unsigned int &di, int &cara, unsigned int &pi, unsigne
 }
 
 
-/* 
+void DiscoFisico::registrarRelacion(char *sector, char *nombre) {
+    string ruta = ruta_base + "/0/1/0/1";
+    if (buscarSectorIndice(sector, nombre)) {
+        //printf("Sector ya existe en la sección.\n");
+        return;
+    }
 
+    int fd = open(ruta.c_str(), O_RDWR);
+    if (fd < 0) {
+        perror("No se pudo abrir el archivo");
+        return;
+    }
 
-DiscoFisico::DiscoFisico(int id, int superficies, int pistas, int sectores, const std::string& base_path)
-    : id(id), superficies(superficies), pistas(pistas), sectores(sectores), ruta_base(base_path) {}
-    void DiscoFisico::inicializar() {
+    struct stat st;
+    if (fstat(fd, &st) < 0) {
+        perror("fstat falló");
+        close(fd);
+        return;
+    }
 
-    
-} */
+    size_t size = st.st_size;
+    if (size == 0) {
+        // El archivo está vacío, insertar sección y sector directamente
+        char buffer[512];
+        snprintf(buffer, sizeof(buffer), "#%s\n%s\n", nombre, sector);
+        write(fd, buffer, tamano(buffer, '\0'));
+        close(fd);
+        //printf("Archivo vacío. Sección y sector insertados.\n");
+        return;
+    }
+
+    char *map = (char*)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (map == MAP_FAILED) {
+        perror("mmap falló");
+        close(fd);
+        return;
+    }
+
+    char *ptr = map;
+    char *fin = map + size;
+    char *inicio_seccion = NULL;
+    char *fin_seccion = NULL;
+
+    // Buscar sección
+    while (ptr < fin) {
+        if (*ptr == '#') {
+            char *line_start = ptr;
+            while (ptr < fin && *ptr != '\n') ptr++;
+            int len = ptr - line_start;
+            char temp[256] = {0};
+            memcpy(temp, line_start, len < 255 ? len : 255);
+            quitarEspacios(temp);
+
+            if (compararTotal(temp + 1, (char *)nombre)) {  // +1 para ignorar '#'
+                inicio_seccion = line_start;
+                break;
+            }
+            ptr++;
+        } else {
+            while (ptr < fin && *ptr != '\n') ptr++;
+            ptr++;
+        }
+    }
+
+    // Encontrar fin de la sección
+    if (inicio_seccion) {
+        ptr = inicio_seccion;
+        while (ptr < fin) {
+            if (*ptr == '#' && ptr != inicio_seccion) {
+                fin_seccion = ptr;
+                break;
+            }
+            ptr++;
+        }
+        if (!fin_seccion) fin_seccion = fin;
+    }
+
+    // Preparar contenido a insertar
+    char buffer[512];
+    size_t insercion_len;
+    off_t offset_insercion;
+
+    if (inicio_seccion) {
+        snprintf(buffer, sizeof(buffer), "%s\n", sector);
+        insercion_len = tamano(buffer, '\0');
+        offset_insercion = fin_seccion - map;
+    } else {
+        snprintf(buffer, sizeof(buffer), "\n#%s\n%s\n", nombre, sector);
+        insercion_len = tamano(buffer, '\0');
+        offset_insercion = size;
+    }
+
+    // Extender archivo
+    ftruncate(fd, size + insercion_len);
+    munmap(map, size);
+
+    // Remapear y mover contenido
+    map = (char*)mmap(NULL, size + insercion_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (map == MAP_FAILED) {
+        perror("mmap remap falló");
+        close(fd);
+        return;
+    }
+
+    memmove(map + offset_insercion + insercion_len, map + offset_insercion, size - offset_insercion);
+    memcpy(map + offset_insercion, buffer, insercion_len);
+
+    msync(map, size + insercion_len, MS_SYNC);
+    munmap(map, size + insercion_len);
+    close(fd);
+    //printf("Sector agregado en índice.\n");
+}

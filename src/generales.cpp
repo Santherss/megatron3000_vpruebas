@@ -54,6 +54,7 @@ int estaParcial(char * str,const char **lista){
     }
     return 0;
 }
+
 char *mayusculas(char *origen, char *destino) {
     if (!origen || !destino) return NULL;
     unsigned char i;

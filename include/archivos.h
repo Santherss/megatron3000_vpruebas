@@ -5,10 +5,15 @@
 #include "generales.h"
 
 
-bool insertar_tabla(char *archivo, char separador, DiscoFisico *disk, unsigned int &d, int &c, unsigned int &p, unsigned int &s);
+bool insertar_tabla(char *archivo, char separador, DiscoFisico *disk, unsigned int &d, int &c, unsigned int &p, unsigned int &s, char *nombre_tabla);
 
 bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla,char * archivo,char sepa);
 
 bool avanzar(DiscoFisico *d, unsigned int &di, int &cara, unsigned int &pi, unsigned int &se);
 
+int buscarEsquema(char * nombre);
+
+bool buscarRegistroRelacion (char * sector, char * nombre);
+
+bool buscarSectorIndice(const char *sector, const char *nombre_seccion);
 #endif

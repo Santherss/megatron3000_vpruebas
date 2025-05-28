@@ -22,11 +22,13 @@ public:
     bool modificar(string str, unsigned int d, int cara, unsigned int p,unsigned int s);
     std::string leer(unsigned int d, int cara, unsigned int p,unsigned int s);
     void reporte();
-    bool escribir(string str, unsigned int d, int cara, unsigned int p,unsigned int s);
+    bool escribir(char * str, unsigned int d, int cara, unsigned int p,unsigned int s, char* nombre=NULL);
     bool escribir(FILE * archivo, unsigned int d, int cara, unsigned int p,unsigned int s);
-    bool insertar(char * str,int tam, unsigned int d, int cara, unsigned int p,unsigned int s);
+    bool insertar(char * str, int tam, char * ruta,char*nombre);
+    bool insertar(char * str,int tam, unsigned int d, int cara, unsigned int p,unsigned int s,char*nombre=NULL);
     //por chunks o bloques
     bool avanzar(unsigned int &di, int &cara, unsigned int &pi, unsigned int &se);
+    void registrarRelacion(char * sector, char * nombre); //"indexacion" de los sectores a una relacion
 
     /* void escribir_manual();
     void leer_manual();
