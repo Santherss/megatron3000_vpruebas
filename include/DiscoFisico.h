@@ -14,12 +14,13 @@ private:
     //Sector my_sector;
 public:
     unsigned int discos,pistas,sectores, tam_sector;
-    int tam_bloque;
+    unsigned int tam_bloque;
     DiscoFisico(); 
-    void crear(char* nombre, unsigned int discos, unsigned int pistas, unsigned int sectores, unsigned int tam);
+    void crear(char* nombre, unsigned int discos, unsigned int pistas, unsigned int sectores, unsigned int tam,unsigned int bloque);
     bool inicializar(char * nombre);
     
     bool modificar(string str, unsigned int d, int cara, unsigned int p,unsigned int s);
+    std::string leer(char * rut);
     std::string leer(unsigned int d, int cara, unsigned int p,unsigned int s);
     void reporte();
     bool escribir(char * str, unsigned int d, int cara, unsigned int p,unsigned int s, char* nombre=NULL);

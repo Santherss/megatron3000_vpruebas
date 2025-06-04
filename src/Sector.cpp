@@ -70,6 +70,7 @@ bool Sector::leer_sector(string& str, string rut){
     return 1;
 }
 
+
 bool Sector::esta_lleno(string rut){
     rut = ruta_base + "/"+ rut;
     const char * ruta = rut.c_str();

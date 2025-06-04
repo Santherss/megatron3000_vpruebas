@@ -11,9 +11,11 @@ bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla,char * archivo,char
 
 bool avanzar(DiscoFisico *d, unsigned int &di, int &cara, unsigned int &pi, unsigned int &se);
 
-int buscarEsquema(char * nombre);
+int buscarEsquema(char * nombre,char* rel=NULL);
 
 bool buscarRegistroRelacion (char * sector, char * nombre);
 
 bool buscarSectorIndice(const char *sector, const char *nombre_seccion);
+
+void extraerCampoLinea(char *linea, int indice, char *destino);
 #endif

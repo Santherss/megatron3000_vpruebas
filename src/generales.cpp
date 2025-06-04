@@ -158,3 +158,30 @@ const char* tipo_dato(char *campo) {
 
     return tienePunto ? "float" : "int";
 }
+
+
+void printCabecera(char * str, int pos){
+    for (char i = pos; i < tamano(str)-1; i++){
+        if (str[i]=='#'){
+            putchar(' ');
+            putchar('|');
+            putchar(' ');
+        } else
+            putchar(str[i]);
+    }
+    putchar('\n');
+}
+
+char *tipoDato(char *valor) {
+    int i = 0, punto = 0;
+    if (valor[0] == '-' || valor[0] == '+') i++;
+    for (; valor[i]; i++) {
+        if (valor[i] == '.') {
+            if (++punto > 1) return (char *)"string";
+        } else if (valor[i] < '0' || valor[i] > '9') {
+            return (char *)"string";
+        }
+    }
+    if (punto == 1) return (char *)"float";
+    return (char *)"int";
+}

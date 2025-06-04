@@ -32,6 +32,8 @@ char * quitarEspacios(char *str);
 
 const char* tipo_dato(char *campo);
 
+void printLinea(char * str, int pos=0);
 
+char *tipoDato(char *valor);
 
 #endif

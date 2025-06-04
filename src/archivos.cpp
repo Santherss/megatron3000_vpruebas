@@ -26,6 +26,7 @@ bool insertar_tabla(char *archivo, char separador, DiscoFisico *disk, unsigned i
         }
         string ruta = ruta_base + "/0/1/0/1";
         FILE * indice = fopen(ruta.c_str(),"r");
+
         //string nombre_sector = to_string(d)+"/"+to_string(c)+"/"+to_string(p)+"/"+to_string(s);
 
         char buffer[256];
@@ -42,6 +43,7 @@ bool insertar_tabla(char *archivo, char separador, DiscoFisico *disk, unsigned i
                 break;
             }
         }
+        fclose(indice);
 
         if (haySector){
             if (disk->insertar(linea,tamano(linea),quitarEspacios(sectorIndice),nombre_tabla)) {
@@ -75,8 +77,10 @@ bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla, char *  archivo,ch
 
     std::string contenido = disk->leer(0, 1, 0, 0);
     //! cambiar forma de buscar
-    if (buscarEsquema(nombre_tabla)) {
+    char relacion[250];
+    if (buscarEsquema(nombre_tabla,relacion)) {
         write(1, "ERROR: tabla ya existe\n", 24);
+        fclose(f);
         return false;
     }
     for (int i = 0; i < tamano(registro)+1; i++){
@@ -134,27 +138,32 @@ bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla, char *  archivo,ch
     char nuevoNombre[tamano(nombre_tabla)+3];
     snprintf(nuevoNombre, sizeof(nuevoNombre), "#%s\n", nombre_tabla);
     disk->insertar(nuevoNombre,tamano(nuevoNombre,'\0')-1, 0, 1, 0,1);
-
+    fclose(f);
     return disk->insertar(cabecera_tipos,tamano(cabecera_tipos), 0, 1, 0, 0);
 }
 
-int buscarEsquema(char * nombre){
+int buscarEsquema(char * nombre,char* relacion){
     std::string ruta=(ruta_base+"/0/1/0/0");
     //printf("%s\n",(char*)ruta);
     FILE * esquema = fopen(ruta.c_str(),"r");
-    char relacion[512];
+    //char relacion[512];
     if(!esquema){
         write(1,ruta.c_str(),tamano((char*)ruta_base.c_str(),'\0'));
         write(1,"\n[-] Error al buscar relacion en esquema\n",41);
         return 0;
     }
-    while (fgets(relacion, sizeof(relacion), esquema)){
-        relacion[buscar("#",relacion)] = '\0';
+    while (fgets(relacion, 250, esquema)){
+        char tmp[256];
+        snprintf(tmp, sizeof(tmp), "%s", relacion);
+
+        tmp[buscar("#",tmp)] = '\0';
         //printf("\n%s\n",relacion);
-        if (compararTotal(relacion,nombre)){
+        if (compararTotal(tmp,nombre)){
+            fclose(esquema);
             return 1;
         }
     }
+    fclose(esquema);
     return 0;
 }
 
@@ -174,13 +183,17 @@ bool buscarRegistroRelacion (char * sector, char * nombre){
         if (compararTotal(linea,nombre)){
             fgets(linea, sizeof(linea), RegistroRelacionaes);
             while (linea[0]=='#'){
-                if(sector==linea)
+                if(sector==linea){
+                    fclose(RegistroRelacionaes);
                     return true;
+                }
             }
+            fclose(RegistroRelacionaes);
             return false;
         }
     }
     write(1,"no hay tabla en indice\n",23);
+    fclose(RegistroRelacionaes);
     return 0;
 }
 
@@ -214,4 +227,22 @@ bool buscarSectorIndice(const char *sector, const char *nombre_seccion) {
     if (linea) free(linea);
     fclose(archivo);
     return false;  // no encontrado
+}
+
+
+void extraerCampoLinea(char *linea, int indice, char *destino) {
+    int i = 0, campo_actual = -1, pos = 0;
+    while (linea[i]) {
+        if (linea[i] == '#') {
+            campo_actual++;
+            i++;
+            pos = 0;
+            continue;
+        }
+        if (campo_actual == indice) {
+            destino[pos++] = linea[i];
+        }
+        i++;
+    }
+    destino[pos] = '\0';
 }

@@ -27,7 +27,7 @@ DiscoFisico::DiscoFisico() {
 
 std::string ruta_base = base_base_ruta;
 
-void DiscoFisico::crear(char* nombre, unsigned int discos, unsigned int pistas, unsigned int sectores, unsigned int tam){
+void DiscoFisico::crear(char* nombre, unsigned int discos, unsigned int pistas, unsigned int sectores, unsigned int tam,unsigned int bloque){
     ruta_base = base_base_ruta + nombre;
 
     if (!ruta_base.empty() && ruta_base.size() > 10) {
@@ -59,7 +59,7 @@ void DiscoFisico::crear(char* nombre, unsigned int discos, unsigned int pistas, 
     this->discos = discos - 1;
     this->pistas = pistas - 1;
     this->sectores = sectores - 1;
-    this->tam_bloque = this->tam_sector;
+    this->tam_bloque = bloque;
     
     std::string linea = std::to_string(this->discos) + "#" +
     std::to_string(this->pistas) + "#" +
@@ -79,9 +79,9 @@ bool DiscoFisico::inicializar(char * nombre){
     Sector my_sector (0);
     std::string contenido;
     if (my_sector.leer_sector(contenido,"0/0/0/0")){
-        unsigned int* valores[] = { &discos, &pistas, &sectores, &tam_sector };
+        unsigned int* valores[] = { &discos, &pistas, &sectores, &tam_sector, &tam_bloque};
         size_t start = 0, end;
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 5; ++i) {
             end = contenido.find('#', start);
             string token;
             if(end == std::string::npos)
@@ -93,7 +93,7 @@ bool DiscoFisico::inicializar(char * nombre){
             *valores[i] = stoi(token);
             start = end + 1;
         }
-        this->tam_bloque = this->tam_sector;
+        //this->tam_bloque = this->tam_sector;
         printf("[+] Disco inicializado: %s\n",ruta_base.c_str());
         return 1;
     } else{
@@ -123,23 +123,52 @@ void DiscoFisico::reporte(){
     }
     uintmax_t tam_total = (discos+1) * 2 * (pistas+1) * (sectores+1) * tam_sector;
     uintmax_t tam_usado = 0;
+    uintmax_t sector_usados = 0;
     try {
-            for (const auto& entry : fs::recursive_directory_iterator(ruta_base)) {
-                if (fs::is_regular_file(entry)) {
-                    tam_usado += fs::file_size(entry); 
-                }
+        for (const auto& entry : fs::recursive_directory_iterator(ruta_base)) {
+            if (fs::is_regular_file(entry)) {
+                if(fs::file_size(entry)>0){
+                    tam_usado += fs::file_size(entry);
+                    sector_usados++;
+                } 
             }
+        }
     } catch (const fs::filesystem_error& e) {
         printf("Error al hacer reporte: %s\n", e.what());
         return;
     }
     printf("\n-------------Reporte-------------\n");
     printf("Disco: %s\n",ruta_base.c_str()+tamano((char*)base_base_ruta.c_str()));
-    write(1,leer(0,0,0,0).c_str(),leer(0,0,0,0).length());
-    printf("#%d",tam_bloque);
+    //write(1,leer(0,0,0,0).c_str(),leer(0,0,0,0).length());
+    //printf("#%d",tam_bloque);
     printf("\nTamano total: %llu bytes\n", tam_total);
     printf("Tamano utilizado: %llu bytes\n", tam_usado);
     printf("Espacio libre: %llu bytes\n", tam_total - tam_usado);  
+    
+    printf("\n--------------------------\n");
+    printf("platos: %llu, %llu bytes c/u\n",discos+1,(pistas+1)*(sectores+1)*tam_sector);  
+    printf("pistas: %llu, %llu bytes c/u\n",(pistas+1)*2*(discos+1),(sectores+1)*tam_sector);  
+    printf("sectores: %llu, %llu bytes c/u\n",(sectores+1)*(pistas+1)*(discos+1)*2, tam_sector);  
+    printf("Tamano bloque: %llu sectores, %llu bytes c/u\n", tam_bloque, tam_sector*tam_bloque);
+    printf("\n--------------------------\n");
+    printf("Bloques por pista: %llu\n", (sectores+1)/tam_bloque);
+    printf("Bloques por platos: %llu\n", (sectores+1)/tam_bloque*(pistas+1));
+    printf("sectores: %llu, \n\t%llu vacios\n\t%llu llenos\n",(sectores+1)*(pistas+1)*(discos+1)*2, (sectores+1)*(pistas+1)*(discos+1)*2 +1-sector_usados,sector_usados);  
+    
+    
+    
+}
+
+string DiscoFisico::leer(char * ruta){
+    if(discoInicializado()){
+        printf("[-]Error al leer: no hay disco seleccionado \n");
+        return NULL; 
+    }
+    string contenido;
+    Sector mysector (tam_sector);
+    mysector.leer_sector(contenido,ruta);
+    return contenido;
+    
 }
 
 string DiscoFisico::leer(unsigned int d, int cara, unsigned int p,unsigned int s){
@@ -173,8 +202,9 @@ bool DiscoFisico::escribir(char * str, unsigned int d, int cara, unsigned int p,
                 write(1,"Disco lleno\n",12);
                 return false;
             }
-        ruta = to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);
+        ruta = to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);  
         //return false;
+
     }
     if (nombre){
         //if(!buscarRegistroRelacion((char*)ruta.c_str(),nombre))
@@ -220,7 +250,7 @@ bool DiscoFisico::insertar(char * str, int tam, char * ruta,char*nombre){
         printf("[-]Error al leer: no hay disco seleccionado \n");
         return NULL; 
     }
-    printf("funci insertar %s\n",ruta);
+    //printf("funci insertar %s\n",ruta);
 
     if(fs::file_size(ruta_base+"/"+ruta)+tamano(str) > tam_sector){
         return false;
@@ -240,6 +270,7 @@ bool DiscoFisico::insertar(char * str, int tam, char * ruta,char*nombre){
     //FILE * archivo = fopen((ruta_base+"/"+ruta).c_str(),"a");
     if(!archivo){
         write(1,"Erro al insertar en ",20);
+        fclose(archivo);
         return 0;
     }
     write(fileno(archivo),str,tam+1);
@@ -249,6 +280,7 @@ bool DiscoFisico::insertar(char * str, int tam, char * ruta,char*nombre){
     }
     
     printf("escrito en %s\n",ruta);
+    fclose(archivo);
     return 1;
 
 }
