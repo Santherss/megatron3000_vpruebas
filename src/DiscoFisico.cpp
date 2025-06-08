@@ -64,7 +64,8 @@ void DiscoFisico::crear(char* nombre, unsigned int discos, unsigned int pistas, 
     std::string linea = std::to_string(this->discos) + "#" +
     std::to_string(this->pistas) + "#" +
     std::to_string(this->sectores) + "#" +
-    std::to_string(this->tam_sector);
+    std::to_string(this->tam_sector)+"#"+
+    std::to_string(this->tam_bloque);
     
     if (modificar(linea, 0, 0, 0, 0)) {
         printf("[+] Disco creado...\n");
@@ -146,14 +147,14 @@ void DiscoFisico::reporte(){
     printf("Espacio libre: %llu bytes\n", tam_total - tam_usado);  
     
     printf("\n--------------------------\n");
-    printf("platos: %llu, %llu bytes c/u\n",discos+1,(pistas+1)*(sectores+1)*tam_sector);  
-    printf("pistas: %llu, %llu bytes c/u\n",(pistas+1)*2*(discos+1),(sectores+1)*tam_sector);  
-    printf("sectores: %llu, %llu bytes c/u\n",(sectores+1)*(pistas+1)*(discos+1)*2, tam_sector);  
-    printf("Tamano bloque: %llu sectores, %llu bytes c/u\n", tam_bloque, tam_sector*tam_bloque);
+    printf("platos: %llu | %llu en total, %llu bytes c/u\n",discos+1,discos+1,(pistas+1)*(sectores+1)*tam_sector);  
+    printf("pistas: %llu  | %llu en total, %llu bytes c/u\n",pistas+1,(pistas+1)*2*(discos+1),(sectores+1)*tam_sector);  
+    printf("sectores: %llu | %llu en total, %llu bytes c/u\n",sectores+1,(sectores+1)*(pistas+1)*(discos+1)*2, tam_sector);  
+    printf("Bloque: %llu sectores, %llu bytes c/u\n", tam_bloque, tam_sector*tam_bloque);
     printf("\n--------------------------\n");
     printf("Bloques por pista: %llu\n", (sectores+1)/tam_bloque);
     printf("Bloques por platos: %llu\n", (sectores+1)/tam_bloque*(pistas+1));
-    printf("sectores: %llu, \n\t%llu vacios\n\t%llu llenos\n",(sectores+1)*(pistas+1)*(discos+1)*2, (sectores+1)*(pistas+1)*(discos+1)*2 +1-sector_usados,sector_usados);  
+    printf("sectores: %llu en total\n\t%llu vacios\n\t%llu llenos\n",(sectores+1)*(pistas+1)*(discos+1)*2, (sectores+1)*(pistas+1)*(discos+1)*2 +1-sector_usados,sector_usados);  
     
     
     
@@ -192,28 +193,59 @@ bool DiscoFisico::escribir(char * str, unsigned int d, int cara, unsigned int p,
     //printf("si en escribir\n");
     if(discoInicializado()){
         printf("[-]Error: no hay disco seleccionado \n");
-        return NULL; 
+        return 0; 
     }
     Sector my_sector (tam_sector);
-    string ruta =  to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);
+    int i= 0;
+    char ruta[tam_bloque][20];
+    int idx;
+
+    while (1) {
+        bool todos_vacios = true;
+
+        for (idx = 0; idx < tam_bloque; idx++) {
+            if (!encontrarSector(ruta[idx], i, idx))
+                return 0;
+
+            //printf("ruta %d -- %s\n", i, ruta[idx]);
+
+            if (my_sector.esta_lleno(ruta[idx])) {
+                todos_vacios = false; 
+                break; 
+            }
+        }
+
+        if (todos_vacios)
+            break; 
+
+        i++; 
+    }
+
+
+    //printf("22ruta %d -- %s\n",i,ruta[idx]);
+
+/*     string ruta =  to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);
     while(my_sector.esta_lleno(ruta)){
         //printf("p1\n");
         if(!avanzar(d,cara,p,s)){
-                write(1,"Disco lleno\n",12);
-                return false;
-            }
+            write(1,"Disco lleno\n",12);
+            return false;
+        }
         ruta = to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);  
         //return false;
 
-    }
+    } */
+    //!------
     if (nombre){
         //if(!buscarRegistroRelacion((char*)ruta.c_str(),nombre))
         //printf("mandado a registrar enescribir disco %s\n",ruta.c_str());
-        registrarRelacion((char*)ruta.c_str(),nombre);
+        char str[20];
+        sprintf(str, "%d", i);
+        registrarRelacion(str,nombre);
     }
-    //printf("mandado a escrito en %s\n",ruta.c_str());
+    //printf("mandado a escrito en %d\n",i);
 
-    return insertar(str, tamano(str),(char*)ruta.c_str(),nombre);
+    return insertar(str, tamano(str),(char*)ruta,nombre);
     //return my_sector.modificar_sector(str,ruta);
 }
 
@@ -245,6 +277,51 @@ bool DiscoFisico::escribir(char * str, char * ruta ,char*nombre){
     //return my_sector.modificar_sector(str,ruta);
 } */
 
+bool DiscoFisico::encontrarSector(char * ruta,int id_bloque, int idx) const{
+    if(idx>=tam_bloque)
+        return 0;
+    int total_posiciones = (pistas+1) * (sectores+1); 
+
+    int posicion = id_bloque % total_posiciones;
+    int grupo_en_posicion = id_bloque / total_posiciones;
+    
+    int pista = posicion / (sectores+1);
+    int sector = posicion % (sectores+1);
+    
+    int inicio_disco_cara = grupo_en_posicion * tam_bloque;
+    int sectores_mostrados = 0;
+
+    //int i = idx;
+    for (int i = 0; i < tam_bloque && sectores_mostrados < tam_bloque; i++) {
+        int indice_disco_cara = inicio_disco_cara + i;
+        int disco = indice_disco_cara / 2;
+        int cara = indice_disco_cara % 2;
+        
+        if (disco < (discos+1) && cara < 2 && pista < (pistas +1)&& sector < (sectores+1)) {
+            if(idx==i){
+                //printf("ID: %d --Sector: %d/%d/%d/%d\n", id_bloque, disco, cara, pista, sector);
+                sprintf(ruta, "%d/%d/%d/%d", disco, cara, pista, sector);
+                return 1;
+            }    
+            sectores_mostrados++;
+        } else {
+            return 0; 
+        }
+    }
+}
+
+bool DiscoFisico::insertarBloque(char * linea,int id_bloque,char * nombre){
+    char ruta[20];
+    for(int i = 0; i < tam_bloque;i++){
+        encontrarSector(ruta,id_bloque,i);
+        if(insertar(linea,tamano(linea),ruta,nombre))
+            return 1;
+    }
+    printf("[-] no se pudo insertar en el bloque %d\n",id_bloque);
+    return 0;
+     escribir(linea,0,0,0,0,nombre);
+}
+
 bool DiscoFisico::insertar(char * str, int tam, char * ruta,char*nombre){
     if(discoInicializado()){
         printf("[-]Error al leer: no hay disco seleccionado \n");
@@ -274,10 +351,10 @@ bool DiscoFisico::insertar(char * str, int tam, char * ruta,char*nombre){
         return 0;
     }
     write(fileno(archivo),str,tam+1);
-    if (nombre){
+    /* if (nombre){
         //if(!buscarRegistroRelacion((char*)ruta.c_str(),nombre))
-            registrarRelacion((char*)ruta,nombre);
-    }
+        registrarRelacion((char*)ruta,nombre);
+    } */
     
     printf("escrito en %s\n",ruta);
     fclose(archivo);
@@ -286,6 +363,7 @@ bool DiscoFisico::insertar(char * str, int tam, char * ruta,char*nombre){
 }
 
 bool DiscoFisico::insertar(char * str, int tam,unsigned int d, int cara, unsigned int p,unsigned int s,char*nombre){
+    printf("***************\n");
     string ruta = to_string(d)+"/"+to_string(cara)+"/"+to_string(p)+"/"+to_string(s);
     while(fs::file_size(ruta_base+"/"+ruta)+tamano(str) > tam_sector ){
         //write(1, ruta.c_str(), ruta.length());

@@ -1,7 +1,7 @@
 #include "archivos.h"
 
 
-bool insertar_tabla(char *archivo, char separador, DiscoFisico *disk, unsigned int &d, int &c, unsigned int &p, unsigned int &s, char *nombre_tabla) {
+bool insertar_tabla(int cantidad,char *archivo, char separador, DiscoFisico *disk, unsigned int &d, int &c, unsigned int &p, unsigned int &s, char *nombre_tabla) {
     FILE *f = fopen(archivo, "r");
     if (!f) {
         write(1, "ERROR: no se pudo abrir archivo\n", 33);
@@ -11,6 +11,11 @@ bool insertar_tabla(char *archivo, char separador, DiscoFisico *disk, unsigned i
     char linea[512];
     fgets(linea, sizeof(linea), f);
     while (fgets(linea, sizeof(linea), f)) {
+        cantidad--;
+        if(cantidad==-1){
+            break;
+        }
+        //printf("cantidad %d",cantidad);
         int len = tamano(linea);
         if ((unsigned)len >= disk->tam_sector) {
             write(1, "ERROR: línea muy larga\n", 24);
@@ -34,18 +39,54 @@ bool insertar_tabla(char *archivo, char separador, DiscoFisico *disk, unsigned i
         bool haySector = false;
         while (fgets(buffer, sizeof(buffer), indice)){
             //printf("insretar tabla:  %s -  nombre : %s\n",buffer+1,nombre_tabla);
-            if(compararTotal(quitarEspacios(buffer+1),nombre_tabla)){
+            if(compararTotal(quitarEspacios(buffer+1),nombre_tabla)){//encuentra relacion
+                //busca bloque
                 while (fgets(buffer, sizeof(buffer), indice)and buffer[0]!='#'){
+                    //estamos en bloque espacio-id_bloque
+                    //if(buffer[0]=='-'){
+                        //int i = 0;
+                        //char espacio[tamano((char*)to_string(disk->tam_sector *disk->tam_bloque).c_str())];
+                        /* char espa[5];
+                        while(*buffer and !isalpha(buffer[i+1])){
+                            espa[i]=buffer[i];
+                            i++;
+                        }
+                        espa[i]='\0'; */
+                        //int espacio = stoi(espa);
+                        //printf("espa *%s*\n",espa);
+                        //if(stoi(espa)>=tamano(linea)){
+                            //int idx_sector = 0;
+                            // (fgets(buffer, sizeof(buffer), indice)and buffer[0]!='-'){
+                                //snprintf(sectorIndice[idx_sector],sizeof(sectorIndice[idx_sector]),"%s",buffer);
+                                //idx_sector++;
+                            //}
+                            //snprintf(sectorIndice, sizeof(sectorIndice), "%s",buffer[i+1]);
+                            //haySector= true;
+                            snprintf(sectorIndice, sizeof(sectorIndice), "%s",buffer);
+                            haySector = true;
+                            //break;
+                        //}
+                            //for(int k=0;k;k++)
+
+                    //}
                     //printf("[+]encontreo sector en indice\n");
-                    snprintf(sectorIndice, sizeof(sectorIndice), "%s",buffer);
-                    haySector = true;
+                    //snprintf(sectorIndice, sizeof(sectorIndice), "%s",buffer);
+                    //haySector = true;
                 }
                 break;
             }
         }
         fclose(indice);
-
-        if (haySector){
+        if(haySector){
+            //printf("bloque *%s*\n",quitarEspacios(sectorIndice));
+            if(disk->insertarBloque(linea,stoi(quitarEspacios(sectorIndice)),nombre_tabla))
+                continue;
+        }   
+        if (!disk->escribir(linea, d, c, p, s,nombre_tabla)) {
+            write(1, "ERROR al escribir línea en funci insertar tabla\n", 48);
+            break;
+        }
+       /*  if (haySector){
             if (disk->insertar(linea,tamano(linea),quitarEspacios(sectorIndice),nombre_tabla)) {
                 //write(1, "ERROR al insertar línea\n", 25);
                 //break;
@@ -55,8 +96,8 @@ bool insertar_tabla(char *archivo, char separador, DiscoFisico *disk, unsigned i
         if (!disk->escribir(linea, d, c, p, s,nombre_tabla)) {
             write(1, "ERROR al escribir línea en funci insertar tabla\n", 48);
             break;
-        }
-        /* if (!disk->insertar(linea, len, d, c, p, s,nombre_tabla)) {
+        } */
+        /*//// if (!disk->insertar(linea, len, d, c, p, s,nombre_tabla)) {
             write(1, "ERROR al insertar línea\n", 25);
             break;
         } */
@@ -84,13 +125,17 @@ bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla, char *  archivo,ch
         return false;
     }
     for (int i = 0; i < tamano(registro)+1; i++){
-        registro[i] = registro[i]==sepa? '#': registro[i];
+        registro[i] = registro[i]==sepa? '#': registro[i];   
+    }
+    registro[tamano(registro)]='#';
+    for (int ii = 0; ii < tamano(cabecera)+1; ii++){
+        cabecera[ii] = cabecera[ii]==sepa? '#': cabecera[ii];
             
     }
-    for (int i = 0; i < tamano(cabecera)+1; i++){
-        cabecera[i] = cabecera[i]==sepa? '#': cabecera[i];
-            
-    }
+    cabecera[tamano(cabecera)] = '#'; 
+    //printf("registro:\n%s\n",registro);
+    //printf("cabecera:\n%s\n",cabecera);
+
     char cabecera_tipos[tamano(cabecera)+tamano(registro)+tamano(nombre_tabla)+2];
     int posCabecera=0;
     int posRegistro=0;
@@ -118,7 +163,7 @@ bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla, char *  archivo,ch
         for (int i = 0; i < finReg && k < 63; ++i)
             tempCampo[k++] = registro[posRegistro + i];
         tempCampo[k] = '\0';
-
+        //printf("tempCampo - %s\n",tempCampo);
         const char* tipo = tipo_dato(tempCampo);
 
         for (int i = 0; tipo[i]; ++i)
@@ -139,6 +184,7 @@ bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla, char *  archivo,ch
     snprintf(nuevoNombre, sizeof(nuevoNombre), "#%s\n", nombre_tabla);
     disk->insertar(nuevoNombre,tamano(nuevoNombre,'\0')-1, 0, 1, 0,1);
     fclose(f);
+    //printf("cabecera-tipo:\n%s\n",cabecera_tipos);
     return disk->insertar(cabecera_tipos,tamano(cabecera_tipos), 0, 1, 0, 0);
 }
 
@@ -157,8 +203,9 @@ int buscarEsquema(char * nombre,char* relacion){
         snprintf(tmp, sizeof(tmp), "%s", relacion);
 
         tmp[buscar("#",tmp)] = '\0';
-        //printf("\n%s\n",relacion);
         if (compararTotal(tmp,nombre)){
+            relacion[buscar("\n",relacion)]='#';
+            //printf("\n%s\n",relacion);
             fclose(esquema);
             return 1;
         }
