@@ -6,8 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <filesystem>
 
-
+namespace fs = std::filesystem;
 
 
 bool campos_create_tabla(int tam,char *str, char *nombre_tabla, char *archivo, char *separador, char * modo) {
@@ -613,6 +614,7 @@ bool procesar_eliminar(char * str, DiscoFisico * mydisc){
 
                     if (evaluarCondiciones(linea_start, condicion, campos, tipos, n_campos)) {
                         // Marcar registro como eliminado sobrescribiendo el primer carácter con '-'
+                        printf("elimando en %s\n",ruta_datos);
                         std::string linea_eliminada = "-";
                         linea_eliminada += (linea_start + 1);  // Agregar el resto de la línea
                         datos_modificados += linea_eliminada + "\n";
@@ -770,6 +772,42 @@ int procesar_consulta(char * str, DiscoFisico * mydisk){
         return 1; 
     }
 
+    if(buscar("BLOQUE",mayus)==0){
+        char id[10] = {0}; // Inicializar el array y hacerlo más grande
+        int idx=0;
+        str = str + tamano("bloque");
+        while(*str == ' ') str++; // Usar == en lugar de =
+        while (*(str+idx) && *(str+idx) != '\n' && *(str+idx) != ' '){ // Usar && en lugar de and
+            id[idx] = *(str+idx); // Corregir la indexación
+            idx++;
+        }
+        id[idx] = '\0'; // Agregar terminador nulo
+        int num_id = stoi(id);
+        //printf("id %d\n", num_id);
+        char ruta[20];
+        for(int ii = 0; ii < mydisk->tam_bloque;ii++){
+            if(!mydisk->encontrarSector(ruta,num_id,ii)) return false;
+            printf("BLOQUE %s\n%s\n",ruta, mydisk->leer(ruta).c_str());
+        }
+        
+        return 1;
+    }
+    if(buscar("MOSTRAR",mayus)==0){
+        char ruta[20];
+        int num_id=0;
+        while(1){
+            int capacidad=0;
+            for(int ii = 0; ii < mydisk->tam_bloque;ii++){
+                if(!mydisk->encontrarSector(ruta,num_id,ii)) return 1;
+                capacidad+= fs::file_size(ruta_base+"/"+ ruta);
+            }
+            printf("bloque %d - capacidad %d\n",num_id,capacidad);
+            num_id++;
+        }
+        return 1;
+    }
+
+
     //if(buscar("TREE",mayus)==0){}
 
     write(1,"Consulta invalida usa HELP\n",27);
@@ -786,7 +824,7 @@ void terminal(){
     bool continuar = 1;
     bool disco = false;
     DiscoFisico * myDisk = new DiscoFisico();
-    myDisk->inicializar("d");
+    myDisk->inicializar("default");
     //myDisk->crear("d",3,3,3,500,3);
     //write(1,"\n",1);
     write(1,"Welcom to MEGATRON3000!!!\n->  ",30);

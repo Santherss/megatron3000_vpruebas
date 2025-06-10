@@ -129,6 +129,7 @@ void DiscoFisico::reporte(){
         for (const auto& entry : fs::recursive_directory_iterator(ruta_base)) {
             if (fs::is_regular_file(entry)) {
                 if(fs::file_size(entry)>0){
+                    printf("sector ocupado %s\n",entry.path().c_str());
                     tam_usado += fs::file_size(entry);
                     sector_usados++;
                 } 
@@ -366,13 +367,14 @@ bool DiscoFisico::encontrarSector(char * ruta,int id_bloque, int idx) const{
 
 
 // suma(lista)  espaciolibre indice eliminado
+
 bool DiscoFisico::actualizarCabeceraFija(char * ruta){
     FILE * archivo = fopen(ruta,"r+");
     if(!archivo){
         printf("error en abrir archivo para actualizar cabecera\n");
         return 0;
     }
-    printf("actualizando %s\n",ruta);
+    //printf("actualizando %s\n",ruta);
     //int espacio = tam_sector;
     int espacio = tam_sector;
     char linea[250];
@@ -390,16 +392,6 @@ bool DiscoFisico::actualizarCabeceraFija(char * ruta){
     int campo_tamano = -1;
     //resta cabecera (si tiene)
     espacio=espacio-9;
-/*     if(!buscar("#",linea)){
-        int k=0;
-        for (int i = 0; i < 3; i++){
-            for (int j = 0; j < 3; j++){
-                campos[i][j]=linea[k++];
-            }
-            printf("campo %d %s\n",i,campos[i]);
-        } 
-        campo_tamano =stoi(campos[0]);
-    } else { */
     if(fgets(linea, sizeof(linea),archivo)){
         campo_tamano=tamano(linea);
         if(linea[0]!='-')
@@ -411,17 +403,6 @@ bool DiscoFisico::actualizarCabeceraFija(char * ruta){
 
         }
     }
-/*     else {
-        int k=0;
-        for (int i = 0; i < 3; i++){
-            for (int j = 0; j < 3; j++){
-                campos[i][j]=linea[k++];
-            }
-            printf("campo %d %s\n",i,campos[i]);
-        } 
-        //campo_tamano =stoi(campos[0]);
-    } */
-    //}
     bool encontrado= true;
     int conta=1;
     while(fgets(linea, sizeof(linea),archivo)){
@@ -525,7 +506,7 @@ bool DiscoFisico::insertarFijo(char * str, char * ruta,char*nombre, int * lista_
     printf("cabecera %s\n",linea);
     linea[6]='\0';
     printf("espacio %d\n",stoi(linea+4));
-    if(stoi(linea+4)==0){
+    if(stoi(linea+3)==0){
         printf("no hay espacio segun cabecera\n");
         return false;
     }
@@ -539,11 +520,12 @@ bool DiscoFisico::insertarFijo(char * str, char * ruta,char*nombre, int * lista_
     }
     while(fgets(linea,sizeof(linea),archivo))
         if (linea[0]=='-'){
-            fseek(archivo, -tamano(linea), SEEK_CUR);
+            fseek(archivo, -tamano(linea)-1, SEEK_CUR);
             fputs(str,archivo);
             fclose(archivo);
             actualizarCabeceraFija((char*)ruta_escribir.c_str());
             printf("[+]registro fijo escrito en uno elimnado %s\n",ruta);
+            printf("nueva %s\n",str);
             return 1;
         }
         

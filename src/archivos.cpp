@@ -51,11 +51,34 @@ bool insertar_tabla(int cantidad,char *archivo, char separador, DiscoFisico *dis
             //printf("insretar tabla:  %s -  nombre : %s\n",buffer+1,nombre_tabla);
             if(compararTotal(quitarEspacios(buffer+1),nombre_tabla)){//encuentra relacion
                 //busca bloque
+                bool continuarr=true;
                 while (fgets(buffer, sizeof(buffer), indice)and buffer[0]!='#'){
 
                     snprintf(sectorIndice, sizeof(sectorIndice), "%s",buffer);
                     haySector = true;
+                    char rutta[20];
+                    for (int ii = 0; ii < disk->tam_bloque; ii++){
+                        if(disk->encontrarSector(rutta,stoi(sectorIndice),ii)){
+                            string nuevaRuta = ruta_base + "/"+rutta;
+                            FILE * arrchivo = fopen(nuevaRuta.c_str(),"r");
+                            char llinea[15];
+                            if (fgets(llinea,sizeof(llinea),arrchivo)){
+                                llinea[6]='\0';
+                                printf("espacio %d\n",stoi(llinea+4));
+                                if(stoi(llinea+4)>0){
+                                    continuarr =false;
+                                    break;
+                                }
+                            }
+                            
+                            fclose(arrchivo);
+                        }
 
+                    }
+                    if (!continuarr){
+                        break;
+                    }
+                    
                     //}
                     //printf("[+]encontreo sector en indice\n");
                     //snprintf(sectorIndice, sizeof(sectorIndice), "%s",buffer);
