@@ -10,7 +10,7 @@
 
 
 
-bool campos_create_tabla(int tam,char *str, char *nombre_tabla, char *archivo, char *separador) {
+bool campos_create_tabla(int tam,char *str, char *nombre_tabla, char *archivo, char *separador, char * modo) {
     //str += tamano((char *)"CREATE");
     str+=tam;
     while (*str == ' ') str++;
@@ -27,25 +27,52 @@ bool campos_create_tabla(int tam,char *str, char *nombre_tabla, char *archivo, c
     while (*str == ' ') str++;
     if(*str =='t'){
         *separador= '\t';
-    }
-    else 
+    } else 
         *separador = *str ? *str : ',';
+
+    str++;
+    while (*str == ' ') str++; 
+    if (*str) {
+        *modo = *str; 
+    } else {
+        printf("modo defecto -> Fijo\n");
+        *modo = 'F'; 
+    }
     return true;
 }
 
 bool crear_tabla(char *str, DiscoFisico *disk) {
-    char nombre[32], archivo[64], sep;
-    if (!campos_create_tabla(tamano("CREATE"),str, nombre, archivo, &sep)) {
+    char nombre[32], archivo[64], sep, modo;
+    if (!campos_create_tabla(tamano("CREATE"),str, nombre, archivo, &sep, &modo)|| !(modo=='V' || modo =='F' || modo=='f' || modo=='v')) {
         write(1, "erorr parametros invalidos\n", 28);
         return false;
     }
-
-    if (!agregar_a_esquema(disk, nombre,archivo,sep)) return false;
-
+    printf("nombre %s archivo %s separador %c modo %c*\n",nombre,archivo,sep,modo);
+    
+    char cabecera[512];
+    if (!agregar_a_esquema(disk, nombre,archivo,sep, cabecera)) return false;
+    int tamanos[20];
+    int i=0;
+    int idx=1;
+    //printf("cabecera %s\n",cabecera);
+    
+    while(i<tamano(cabecera)){
+        while((cabecera+i) and *(cabecera+i)!='#')
+            putchar(*(cabecera+i++));
+        printf(": ");
+        i++;
+        scanf("%d", &tamanos[idx++]);
+        //putchar('\n');
+    }
+    getchar();
+    tamanos[0]=idx;
     // Buscar sector libre desde (0,0,0,1)
     unsigned int d = 0, p = 0, s = 1;
     int c = 0;
-    return insertar_tabla(-1,archivo, sep, disk, d, c, p, s,nombre);
+    for (int i = 0; i < idx; i++){
+        printf("lista tam %d - %d\n",i,tamanos[i]);
+    }
+    return insertar_tabla(-1,archivo, sep, disk, d, c, p, s,nombre, modo, tamanos);
 }
 
 bool evaluarCondicion(char *valorCampo, char *operador, char *valorCondicion, char *tipoDato) {
@@ -224,6 +251,7 @@ void extraerCampos(char *linea, char campos_extraidos[][100], int *num_campos) {
         (*num_campos)++;
     }
 }
+//!----------------------
 
 bool procesar_select(char *str, char *mayus, DiscoFisico *mydisk) {
     int from_pos = buscar("FROM", mayus);
@@ -342,15 +370,15 @@ bool procesar_select(char *str, char *mayus, DiscoFisico *mydisk) {
         if (idx >= 0 && idx < n_campos) {
             if (!primero) {
                 if (salida) fputc('|', salida);
-                else putchar('|');
+                putchar('|');
             }
             if (salida) fprintf(salida, "%s", campos[idx]);
-            else printf("%s", campos[idx]);
+            printf("%s", campos[idx]);
             primero = false;
         }
     }
     if (salida) fputc('\n', salida);
-    else putchar('\n');
+    putchar('\n');
 
     // Ruta de índice
     char ruta[256];
@@ -366,6 +394,9 @@ bool procesar_select(char *str, char *mayus, DiscoFisico *mydisk) {
     char buffer[25];
     bool imprimir = false;
 
+    int * tamanos =new int[20];
+    //tamanos[0]=0;
+    int iTamanos=1;
     while (fgets(buffer, sizeof(buffer), indice)) {
         if (buffer[0] == '#' && compararTotal(quitarEspacios(buffer + 1), tabla)) {
             imprimir = true;
@@ -376,6 +407,7 @@ bool procesar_select(char *str, char *mayus, DiscoFisico *mydisk) {
             quitarEspacios(buffer);
             for (int i=0;i<mydisk->tam_bloque;i++){
                 char ruta[20];
+                //printf("buffer %s",buffer);
                 mydisk->encontrarSector(ruta,stoi(buffer),i);
                 std::string datos_string = mydisk->leer(quitarEspacios(ruta));
 
@@ -386,10 +418,10 @@ bool procesar_select(char *str, char *mayus, DiscoFisico *mydisk) {
 
                 char *linea_start = datos;
                 char *linea_end;
-
+                bool cabecera = true;
+                
                 while ((linea_end = strchr(linea_start, '\n')) != NULL) {
                     *linea_end = '\0';
-
                     if (!condiciones || evaluarCondiciones(linea_start, condiciones, campos, tipos, n_campos)) {
                         // Extraer todos los campos de la línea
                         char campos_linea[50][100];
@@ -398,84 +430,109 @@ bool procesar_select(char *str, char *mayus, DiscoFisico *mydisk) {
                         
                         // Imprimir solo los campos seleccionados
                         bool primero = true;
+                        //tamanos[iTamanos]=0;
                         for (int k = 0; k < n_indices; k++) {
                             int idx = indices_seleccionados[k];
                             if (idx >= 0 && idx < num_campos_linea) {
+                                
+                                if(cabecera||campos_linea[idx][0]=='-'){
+                                    cabecera=true;
+                                    break;
+                                }
                                 if (!primero) {
                                     putchar('|');
                                     if (salida) fputc('|', salida);
                                 }
-                                printf("%s", campos_linea[idx]);
-                                if (salida) fprintf(salida, "%s", campos_linea[idx]);
+                                int temp =tamano(campos_linea[idx]);
+                                tamanos[k+1]= temp;
+                                //printf("tamanos %d -%d\n",tamano(campos_linea[idx]),tamanos[k+1]);
+                                //iTamanos++;
+                                /* if(campos_linea[idx][0]=='-'){
+                                    cabecera=true;
+                                    break;
+                                }  */
+                                for (int i = 0; i < tamano(campos_linea[idx]); i++){
+                                    if(campos_linea[idx][i]!='~'){
+                                        putchar(campos_linea[idx][i]);
+                                        if(salida) fputc(campos_linea[idx][i],salida);
+                                    }
+
+                                }
+                               
                                 primero = false;
                             }
                         }
-                        putchar('\n');
-                        if (salida) fputc('\n', salida);
+                        if(!cabecera){
+                            putchar('\n');
+                            if (salida) fputc('\n', salida);
+                        }else
+                            cabecera=false;
                     }
-
                     linea_start = linea_end + 1;
                 }
-
-
-
             }
-            
         }
     }
 
     if (salida){
         fclose(salida);
-        if (!agregar_a_esquema(mydisk, archivo_salida,archivo_salida,'|')) return false;
+        char nulle[250];
+        if (!agregar_a_esquema(mydisk, archivo_salida,archivo_salida,'|',nulle)) return false;
         // Buscar sector libre desde (0,0,0,1)
         unsigned int d = 0, p = 0, s = 1;
         int c = 0;
-        insertar_tabla(-1,archivo_salida, '|', mydisk, d, c, p, s,archivo_salida);
-    };
+        iTamanos = n_indices+1;
+        tamanos[0]=iTamanos;
+        for (int rr = 0; rr < iTamanos; rr++){
+            printf("lista %d - %d\n",rr,tamanos[rr]);
+        }
+        insertar_tabla(-1,archivo_salida, '|', mydisk, d, c, p, s,archivo_salida,'F',tamanos);
+        delete tamanos;
+    }
     fclose(indice);
 
     return true;
 }
 
+
 bool insertarArchivo(char * str, DiscoFisico * mydis){
-    char nombre[32], archivo[64], sep;
+    char nombre[32], archivo[64], sep, modo;
     char cantidad[5];
     str+=tamano("insert");
     while (*str == ' ') str++;
 
     int i=0;
     //while(*str && *str != ' '){
-    while(!isalpha(*str)){
+    while(!isalpha(*str) and *str != ' '){
         cantidad[i++]=*str++;
     }
     cantidad[i]='\0';
 
-    if (!campos_create_tabla(0,str, nombre, archivo, &sep)) {
+    if (!campos_create_tabla(0,str, nombre, archivo, &sep,&modo)) {
         write(1, "ERROR: parámetros inválidos\n", 28);
         return false;
     }
-/*     printf("nombre *%s*\n",nombre);
+    printf("nombre *%s*\n",nombre);
     printf("archivo *%s*\n",archivo);
     printf("separador *%c*\n",sep);
     printf("cantidad *%s*\n",cantidad);
-    printf("cantidad *%d*\n",stoi(cantidad)); */
-    //! falta validación
+    printf("cantidad *%d*\n",stoi(cantidad)); 
     unsigned int d = 0, p = 0, s = 1;
     int c = 0;
     char null[500];
     if(!buscarEsquema(nombre,null)){
-        printf("[-]No existe tabla con ese nombre\n");
+        printf("[-]No existe tabla(%s) con ese nombre\n",nombre);
         return 0;
     }
-    return insertar_tabla(stoi(cantidad),archivo, sep, mydis, d, c, p, s,nombre);
+    return insertar_tabla(stoi(cantidad),archivo, sep, mydis, d, c, p, s,nombre, 'F');
 }
+
 
 bool procesar_eliminar(char * str, DiscoFisico * mydisc){
     char mayus [tamano (str)];
     mayusculas(str,mayus); 
     
     //delete from tabla where adsfa
-
 
     int pos_from = buscar("FROM", mayus);
     int pos_where = buscar("WHERE",mayus);
@@ -491,6 +548,29 @@ bool procesar_eliminar(char * str, DiscoFisico * mydisc){
     printf("nombre *%s*\n", nombre);
     printf("condicon *%s*\n", condicion);
     
+    // Obtener esquema de la tabla
+    char relacion[250];
+    if (!buscarEsquema(nombre, relacion)) {
+        printf("[-] No hay relacion en esquema para tabla: %s\n", nombre);
+        return false;
+    }
+
+    // Extraer campos y tipos del esquema
+    char campos[50][50], tipos[50][10];
+    int n_campos = 0, pos = buscar("#", relacion) + 1;
+
+    while (relacion[pos]) {
+        int i = 0;
+        while (relacion[pos] != '#' && relacion[pos]) campos[n_campos][i++] = relacion[pos++];
+        campos[n_campos][i] = '\0'; pos++;
+
+        i = 0;
+        while (relacion[pos] != '#' && relacion[pos]) tipos[n_campos][i++] = relacion[pos++];
+        tipos[n_campos][i] = '\0'; pos++;
+
+        n_campos++;
+    }
+    
     //----
     char ruta[256];
     strcpy(ruta, ruta_base.c_str());
@@ -504,6 +584,7 @@ bool procesar_eliminar(char * str, DiscoFisico * mydisc){
 
     char buffer[256];
     bool encontrado = false;
+    char ruta_datos[20];
 
     while (fgets(buffer, sizeof(buffer), indice)) {
         if (buffer[0] == '#' && compararTotal(quitarEspacios(buffer + 1), nombre)) {
@@ -512,57 +593,57 @@ bool procesar_eliminar(char * str, DiscoFisico * mydisc){
         }
         if (encontrado && buffer[0] == '#') break;
         
+        if (encontrado) {
+            quitarEspacios(buffer);
+            for (int i = 0; i < mydisc->tam_bloque; i++) {
+                mydisc->encontrarSector(ruta_datos, stoi(buffer), i);
+                std::string datos_string = mydisc->leer(quitarEspacios(ruta_datos));
 
+                char datos[4096];
+                datos_string += "#";
+                strncpy(datos, datos_string.c_str(), sizeof(datos) - 1);
+                datos[sizeof(datos) - 1] = '\0';
 
-        /*
-        quitarEspacios(buffer);
-            std::string datos_string = mydisk->leer(quitarEspacios(buffer));
+                char *linea_start = datos;
+                char *linea_end;
+                std::string datos_modificados = "";
 
-            char datos[4096];
-            datos_string+="#";
-            strncpy(datos, datos_string.c_str(), sizeof(datos) - 1);
-            datos[sizeof(datos) - 1] = '\0';
+                while ((linea_end = strchr(linea_start, '\n')) != NULL) {
+                    *linea_end = '\0';
 
-            char *linea_start = datos;
-            char *linea_end;
-
-            while ((linea_end = strchr(linea_start, '\n')) != NULL) {
-                *linea_end = '\0';
-
-                if (!condiciones || evaluarCondiciones(linea_start, condiciones, campos, tipos, n_campos)) {
-                    // Extraer todos los campos de la línea
-                    char campos_linea[50][100];
-                    int num_campos_linea = 0;
-                    extraerCampos(linea_start, campos_linea, &num_campos_linea);
-                    
-                    // Imprimir solo los campos seleccionados
-                    bool primero = true;
-                    for (int k = 0; k < n_indices; k++) {
-                        int idx = indices_seleccionados[k];
-                        if (idx >= 0 && idx < num_campos_linea) {
-                            if (!primero) {
-                                putchar('|');
-                                if (salida) fputc('|', salida);
-                            }
-                            printf("%s", campos_linea[idx]);
-                            if (salida) fprintf(salida, "%s", campos_linea[idx]);
-                            primero = false;
-                        }
+                    if (evaluarCondiciones(linea_start, condicion, campos, tipos, n_campos)) {
+                        // Marcar registro como eliminado sobrescribiendo el primer carácter con '-'
+                        std::string linea_eliminada = "-";
+                        linea_eliminada += (linea_start + 1);  // Agregar el resto de la línea
+                        datos_modificados += linea_eliminada + "\n";
+                    } else {
+                        // Mantener la línea sin cambios
+                        datos_modificados += linea_start;
+                        datos_modificados += "\n";
                     }
-                    putchar('\n');
-                    if (salida) fputc('\n', salida);
+
+                    linea_start = linea_end + 1;
                 }
 
-                linea_start = linea_end + 1;
+                // Escribir los datos modificados usando FILE
+                char ruta_completa[512];
+                strcpy(ruta_completa, ruta_base.c_str());
+                strcat(ruta_completa, "/");
+                strcat(ruta_completa, ruta_datos);
+                
+                FILE *archivo = fopen(ruta_completa, "w");
+                if (archivo) {
+                    fputs(datos_modificados.c_str(), archivo);
+                    fclose(archivo);
+                    mydisc->actualizarCabeceraFija(ruta_completa);
+                }
             }
-        */
-    
-    
-    
+        }
     }
+    printf("registros eliminados\n");
+    fclose(indice);
     return true;
 }
-
 
 
 // -------------------CONSULTA-------------------
@@ -622,18 +703,18 @@ int procesar_consulta(char * str, DiscoFisico * mydisk){
         return 1;
     }
 
-    //! *******
     if(buscar((char *)palabras_reservadas[1],mayus)==0){ //SELECT
         //printf("%s\n",ruta_base.c_str());
-
+        
         procesar_select(str,mayus, mydisk);
         return 1;
         
         //procesar_select()
     } 
+    //! *******
     
     if (buscar((char*)palabras_reservadas[6],mayus)==0){ //insert 32 tabla Arhchivo.txt separador
-        //printf("insert\n");
+        printf("insert\n");
         insertarArchivo(str,mydisk);
         
         return 1;
@@ -654,6 +735,8 @@ int procesar_consulta(char * str, DiscoFisico * mydisk){
         return 1;
     }
     
+    //! *******
+
     if (buscar("DELETE",mayus)==0){ //delete from <tabla> where <id> ==5
         printf("elimando...\n");
         procesar_eliminar(str,mydisk);
@@ -704,6 +787,7 @@ void terminal(){
     bool disco = false;
     DiscoFisico * myDisk = new DiscoFisico();
     myDisk->inicializar("d");
+    //myDisk->crear("d",3,3,3,500,3);
     //write(1,"\n",1);
     write(1,"Welcom to MEGATRON3000!!!\n->  ",30);
     while (continuar){

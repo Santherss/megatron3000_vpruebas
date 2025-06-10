@@ -31,8 +31,13 @@ public:
     bool avanzar(unsigned int &di, int &cara, unsigned int &pi, unsigned int &se);
     void registrarRelacion(char * sector, char * nombre); //"indexacion" de los sectores a una relacion
 
-    bool insertarBloque(char * linea,int id_bloque,char * nombre);
+    bool escribirBloque(char * str, unsigned int d, int cara, unsigned int p,unsigned int s, char* nombre,char modo, int * lista_tamanos);
+
+    bool insertarBloque(char * linea,int id_bloque,char * nombre,char modo, int * lista_tamanos);
     bool encontrarSector(char * ruta,int id_bloque, int idx)const;
+
+    bool actualizarCabeceraFija(char * ruta);
+    bool insertarFijo(char * str, char * ruta,char*nombre, int * lista_tamanos);
     /* void escribir_manual();
     void leer_manual();
     void modificar_manual(); */

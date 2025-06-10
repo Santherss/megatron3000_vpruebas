@@ -1,14 +1,24 @@
 #include "archivos.h"
+#include <string.h>
 
+bool BloqueConEspacio(int id_bloque, DiscoFisico * mydisk){
+    for (int i = 0; i < mydisk->tam_bloque; i++){
+        
+    }
+    
+}
 
-bool insertar_tabla(int cantidad,char *archivo, char separador, DiscoFisico *disk, unsigned int &d, int &c, unsigned int &p, unsigned int &s, char *nombre_tabla) {
+bool insertar_tabla(int cantidad,char *archivo, char separador, DiscoFisico *disk, unsigned int &d, int &c, unsigned int &p, unsigned int &s, char *nombre_tabla, char modo, int * lista_tamanos) {
     FILE *f = fopen(archivo, "r");
     if (!f) {
         write(1, "ERROR: no se pudo abrir archivo\n", 33);
         return false;
     }
+    printf("insertando tabla...\n");
     //!corregir crear bloque en base al tamaño 
     char linea[512];
+    int temp_lista[20]={0};
+
     fgets(linea, sizeof(linea), f);
     while (fgets(linea, sizeof(linea), f)) {
         cantidad--;
@@ -42,31 +52,9 @@ bool insertar_tabla(int cantidad,char *archivo, char separador, DiscoFisico *dis
             if(compararTotal(quitarEspacios(buffer+1),nombre_tabla)){//encuentra relacion
                 //busca bloque
                 while (fgets(buffer, sizeof(buffer), indice)and buffer[0]!='#'){
-                    //estamos en bloque espacio-id_bloque
-                    //if(buffer[0]=='-'){
-                        //int i = 0;
-                        //char espacio[tamano((char*)to_string(disk->tam_sector *disk->tam_bloque).c_str())];
-                        /* char espa[5];
-                        while(*buffer and !isalpha(buffer[i+1])){
-                            espa[i]=buffer[i];
-                            i++;
-                        }
-                        espa[i]='\0'; */
-                        //int espacio = stoi(espa);
-                        //printf("espa *%s*\n",espa);
-                        //if(stoi(espa)>=tamano(linea)){
-                            //int idx_sector = 0;
-                            // (fgets(buffer, sizeof(buffer), indice)and buffer[0]!='-'){
-                                //snprintf(sectorIndice[idx_sector],sizeof(sectorIndice[idx_sector]),"%s",buffer);
-                                //idx_sector++;
-                            //}
-                            //snprintf(sectorIndice, sizeof(sectorIndice), "%s",buffer[i+1]);
-                            //haySector= true;
-                            snprintf(sectorIndice, sizeof(sectorIndice), "%s",buffer);
-                            haySector = true;
-                            //break;
-                        //}
-                            //for(int k=0;k;k++)
+
+                    snprintf(sectorIndice, sizeof(sectorIndice), "%s",buffer);
+                    haySector = true;
 
                     //}
                     //printf("[+]encontreo sector en indice\n");
@@ -77,30 +65,57 @@ bool insertar_tabla(int cantidad,char *archivo, char separador, DiscoFisico *dis
             }
         }
         fclose(indice);
+        //!si el modo es F 
+
+        if(!lista_tamanos){
+            lista_tamanos=temp_lista;
+            char ruta[20];
+            for(int ii = 0; ii < disk->tam_bloque;ii++){
+                if(!disk->encontrarSector(ruta,stoi(quitarEspacios(sectorIndice)),ii)) return false;
+                string ruta_leer = ruta_base+"/"+ruta;
+                FILE * archivo = fopen(ruta_leer.c_str(),"r");
+                if(!archivo){
+                    continue;
+                } 
+                char linea[250];
+                if(!fgets(linea, sizeof(linea),archivo)) {
+                    fclose(archivo);
+                    continue;
+                }
+                
+                if(!fgets(linea, sizeof(linea),archivo)){
+                    fclose(archivo);
+                    continue;
+                } 
+
+                int iLista=1;
+                int c=0;
+                while(*(linea+c) and *(linea+c)!='\n'){
+                    if(*(linea+c)=='#')
+                        iLista++;
+                    else 
+                        temp_lista[iLista]++;
+                    c++;
+                }
+                temp_lista[0]=iLista+1;
+                fclose(archivo);
+                break;
+            }
+            /* for (int i = 0; i < lista_tamanos[0]; i++){
+                printf("listaauto %d - %d\n",i,lista_tamanos[i]);
+            } */
+        }
+        
+
         if(haySector){
             //printf("bloque *%s*\n",quitarEspacios(sectorIndice));
-            if(disk->insertarBloque(linea,stoi(quitarEspacios(sectorIndice)),nombre_tabla))
+            if(disk->insertarBloque(linea,stoi(quitarEspacios(sectorIndice)),nombre_tabla,modo,lista_tamanos))
                 continue;
         }   
-        if (!disk->escribir(linea, d, c, p, s,nombre_tabla)) {
+        if (!disk->escribirBloque(linea, d, c, p, s,nombre_tabla,modo, lista_tamanos)) {
             write(1, "ERROR al escribir línea en funci insertar tabla\n", 48);
             break;
         }
-       /*  if (haySector){
-            if (disk->insertar(linea,tamano(linea),quitarEspacios(sectorIndice),nombre_tabla)) {
-                //write(1, "ERROR al insertar línea\n", 25);
-                //break;
-                continue;
-            }
-        } 
-        if (!disk->escribir(linea, d, c, p, s,nombre_tabla)) {
-            write(1, "ERROR al escribir línea en funci insertar tabla\n", 48);
-            break;
-        } */
-        /*//// if (!disk->insertar(linea, len, d, c, p, s,nombre_tabla)) {
-            write(1, "ERROR al insertar línea\n", 25);
-            break;
-        } */
     }
 
     fclose(f);
@@ -108,14 +123,17 @@ bool insertar_tabla(int cantidad,char *archivo, char separador, DiscoFisico *dis
 }
 
 
-bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla, char *  archivo,char sepa) {
+bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla, char *  archivo,char sepa, char * cabecera_original) {
     FILE *f = fopen(archivo, "r");
-
+    if (!f) {
+        write(1, "ERROR: no se pudo abrir archivo\n", 33);
+        return false;
+    }
     char cabecera[512];
     char registro[512];
     fgets(cabecera, sizeof(cabecera), f);
     fgets(registro, sizeof(registro), f);
-
+    
     std::string contenido = disk->leer(0, 1, 0, 0);
     //! cambiar forma de buscar
     char relacion[250];
@@ -130,12 +148,13 @@ bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla, char *  archivo,ch
     registro[tamano(registro)]='#';
     for (int ii = 0; ii < tamano(cabecera)+1; ii++){
         cabecera[ii] = cabecera[ii]==sepa? '#': cabecera[ii];
-            
+        
     }
     cabecera[tamano(cabecera)] = '#'; 
     //printf("registro:\n%s\n",registro);
     //printf("cabecera:\n%s\n",cabecera);
-
+    strcpy(cabecera_original,cabecera);
+    
     char cabecera_tipos[tamano(cabecera)+tamano(registro)+tamano(nombre_tabla)+2];
     int posCabecera=0;
     int posRegistro=0;

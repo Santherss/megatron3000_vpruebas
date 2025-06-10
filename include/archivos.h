@@ -5,9 +5,9 @@
 #include "generales.h"
 
 
-bool insertar_tabla(int cantidad,char *archivo, char separador, DiscoFisico *disk, unsigned int &d, int &c, unsigned int &p, unsigned int &s, char *nombre_tabla);
+bool insertar_tabla(int cantidad,char *archivo, char separador, DiscoFisico *disk, unsigned int &d, int &c, unsigned int &p, unsigned int &s, char *nombre_tabla, char modo, int * tamano=NULL);
 
-bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla,char * archivo,char sepa);
+bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla,char * archivo,char sepa, char * cabecera);
 
 bool avanzar(DiscoFisico *d, unsigned int &di, int &cara, unsigned int &pi, unsigned int &se);
 

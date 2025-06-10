@@ -5,9 +5,9 @@
 #include <sys/mman.h>     // mmap, munmap, msync
 #include <sys/stat.h>     // fstat
 #include <fcntl.h>       // open
-//#include "Sector.h"
 #include <filesystem>
 #include <string.h>
+#include <stdio.h>
 namespace fs = std::filesystem;
 //crea disco desde cero
 
@@ -152,8 +152,9 @@ void DiscoFisico::reporte(){
     printf("sectores: %llu | %llu en total, %llu bytes c/u\n",sectores+1,(sectores+1)*(pistas+1)*(discos+1)*2, tam_sector);  
     printf("Bloque: %llu sectores, %llu bytes c/u\n", tam_bloque, tam_sector*tam_bloque);
     printf("\n--------------------------\n");
-    printf("Bloques por pista: %llu\n", (sectores+1)/tam_bloque);
-    printf("Bloques por platos: %llu\n", (sectores+1)/tam_bloque*(pistas+1));
+    printf("Bloques por pista: %llu\n", sectores+1);
+    //printf("Bloques por platos: %llu\n", (sectores+1)/tam_bloque*(pistas+1));
+    printf("Bloques por platos: %llu\n",sectores+1 );
     printf("sectores: %llu en total\n\t%llu vacios\n\t%llu llenos\n",(sectores+1)*(pistas+1)*(discos+1)*2, (sectores+1)*(pistas+1)*(discos+1)*2 +1-sector_usados,sector_usados);  
     
     
@@ -204,8 +205,10 @@ bool DiscoFisico::escribir(char * str, unsigned int d, int cara, unsigned int p,
         bool todos_vacios = true;
 
         for (idx = 0; idx < tam_bloque; idx++) {
-            if (!encontrarSector(ruta[idx], i, idx))
+            if (!encontrarSector(ruta[idx], i, idx)){
+                printf("[-]no encontro sector\n");
                 return 0;
+            }
 
             //printf("ruta %d -- %s\n", i, ruta[idx]);
 
@@ -249,6 +252,54 @@ bool DiscoFisico::escribir(char * str, unsigned int d, int cara, unsigned int p,
     //return my_sector.modificar_sector(str,ruta);
 }
 
+bool DiscoFisico::escribirBloque(char * str, unsigned int d, int cara, unsigned int p,unsigned int s,char*nombre, char modo, int * lista_tamanos){
+    //printf("si en escribir\n");
+    if(discoInicializado()){
+        printf("[-]Error: no hay disco seleccionado \n");
+        return 0; 
+    }
+    Sector my_sector (tam_sector);
+    int i= 0;
+    char ruta[tam_bloque][20];
+    int idx;
+
+    while (1) {
+        bool todos_vacios = true;
+
+        for (idx = 0; idx < tam_bloque; idx++) {
+            if (!encontrarSector(ruta[idx], i, idx)){
+                printf("[-]no encontro sector\n");
+                return 0;
+            }
+
+            //printf("ruta %d -- %s\n", i, ruta[idx]);
+
+            if (my_sector.esta_lleno(ruta[idx])) {
+                todos_vacios = false; 
+                break; 
+            }
+        }
+
+        if (todos_vacios)
+            break; 
+
+        i++; 
+    }
+
+    //!------
+    if (nombre){
+        //if(!buscarRegistroRelacion((char*)ruta.c_str(),nombre))
+        //printf("mandado a registrar enescribir disco %s\n",ruta.c_str());
+        char str[20];
+        sprintf(str, "%d", i);
+        printf("registrando relacion...\n");
+        registrarRelacion(str,nombre);
+    }
+//!modifique ruta por i
+    return insertarBloque(str,i,nombre,modo,lista_tamanos);
+    //return my_sector.modificar_sector(str,ruta);
+}
+
 /*
 bool DiscoFisico::escribir(char * str, char * ruta ,char*nombre){
      //printf("si en escribir\n");
@@ -278,8 +329,10 @@ bool DiscoFisico::escribir(char * str, char * ruta ,char*nombre){
 } */
 
 bool DiscoFisico::encontrarSector(char * ruta,int id_bloque, int idx) const{
-    if(idx>=tam_bloque)
+    if(idx>=tam_bloque){
+        printf("[-]eror en indice de sector en bloque\n");
         return 0;
+    }
     int total_posiciones = (pistas+1) * (sectores+1); 
 
     int posicion = id_bloque % total_posiciones;
@@ -305,21 +358,204 @@ bool DiscoFisico::encontrarSector(char * ruta,int id_bloque, int idx) const{
             }    
             sectores_mostrados++;
         } else {
+            printf("error en encontrar sector\n");
             return 0; 
         }
     }
 }
 
-bool DiscoFisico::insertarBloque(char * linea,int id_bloque,char * nombre){
+
+// suma(lista)  espaciolibre indice eliminado
+bool DiscoFisico::actualizarCabeceraFija(char * ruta){
+    FILE * archivo = fopen(ruta,"r+");
+    if(!archivo){
+        printf("error en abrir archivo para actualizar cabecera\n");
+        return 0;
+    }
+    printf("actualizando %s\n",ruta);
+    //int espacio = tam_sector;
+    int espacio = tam_sector;
+    char linea[250];
+    char newline[11]="000999000";
+    if (fgets(linea, sizeof(linea),archivo)==NULL){
+        fseek(archivo, 0, SEEK_SET);
+        fputs(newline,archivo);
+        fputs("\n",archivo);
+        fclose(archivo);
+        return 1;
+    }
+    //printf("cabecera %s\n",linea);
+    //agrupamos de 3
+    char campos[3][3];
+    int campo_tamano = -1;
+    //resta cabecera (si tiene)
+    espacio=espacio-9;
+/*     if(!buscar("#",linea)){
+        int k=0;
+        for (int i = 0; i < 3; i++){
+            for (int j = 0; j < 3; j++){
+                campos[i][j]=linea[k++];
+            }
+            printf("campo %d %s\n",i,campos[i]);
+        } 
+        campo_tamano =stoi(campos[0]);
+    } else { */
+    if(fgets(linea, sizeof(linea),archivo)){
+        campo_tamano=tamano(linea);
+        if(linea[0]!='-')
+            espacio-=tamano(linea,'\n');
+        else{
+            fseek(archivo, -tamano(linea), SEEK_CUR);
+            fputs(to_string(1).c_str(),archivo);
+            fseek(archivo, +tamano(linea)-1, SEEK_CUR);
+
+        }
+    }
+/*     else {
+        int k=0;
+        for (int i = 0; i < 3; i++){
+            for (int j = 0; j < 3; j++){
+                campos[i][j]=linea[k++];
+            }
+            printf("campo %d %s\n",i,campos[i]);
+        } 
+        //campo_tamano =stoi(campos[0]);
+    } */
+    //}
+    bool encontrado= true;
+    int conta=1;
+    while(fgets(linea, sizeof(linea),archivo)){
+        //printf("%s\n",linea);
+        if(linea[0]!='-')
+            espacio-=tamano(linea,'\n');
+        else{
+            fseek(archivo, -tamano(linea), SEEK_CUR);
+            fputs(to_string(conta).c_str(),archivo);
+            fseek(archivo, +tamano(linea)-tamano((char*)to_string(conta).c_str()), SEEK_CUR);
+        }
+        conta++;
+    }
+    espacio/=++campo_tamano;
+    if(espacio>999)
+        espacio=999;
+    if(campo_tamano>999)
+        campo_tamano=999;
+        
+    fseek(archivo, 0, SEEK_SET);
+    snprintf(newline, sizeof(newline), "%03d%03d%03d\n", campo_tamano, espacio,conta);
+    fputs(newline,archivo);
+    fclose(archivo);
+
+
+    return 1;
+}
+bool DiscoFisico::insertarBloque(char * linea,int id_bloque,char * nombre, char modo, int * lista_tamanos){
     char ruta[20];
-    for(int i = 0; i < tam_bloque;i++){
-        encontrarSector(ruta,id_bloque,i);
-        if(insertar(linea,tamano(linea),ruta,nombre))
-            return 1;
+    char newLine[300];
+    int i= 0, n=0;
+    int idx=1;
+    //printf("1funcinsertando %s\n", linea);
+
+    /* for (int i = 0; i < lista_tamanos[0]; i++){
+        printf("22listaauto %d - %d\n",i,lista_tamanos[i]);
+    } */
+    while(idx<lista_tamanos[0]){
+        int tam = 0;
+        while(i< tamano(linea) and *(linea+i)!='#' and *(linea+i)!='\n'){
+            newLine[n]=linea[i];
+            //putchar(linea[i]);
+            tam++;
+            i++;
+            n++;
+        }
+        //putchar('\n');
+        //printf("nuevalinea %s\n",newLine);
+        //printf("i %d\nn %d\nidx %d\ntam %d\nlista_tam %d\n",i,n,idx,tam,lista_tamanos[idx]);
+        if(tam>lista_tamanos[idx]){
+            printf("[-]campo %d mas grande q el maximo %d - %d\n",idx,tam,lista_tamanos[idx]);
+            return false;
+        }
+        for (int  j = tam; j < lista_tamanos[idx]; j++){
+            newLine[n]='~';
+            n++;
+        }
+        newLine[n]=linea[i];
+        i++;
+        n++;
+        idx++;
+    }
+    newLine[n]='\0';
+    //printf("nueva linea: \n %s\n",newLine);
+    for(int ii = 0; ii < tam_bloque;ii++){
+        if(!encontrarSector(ruta,id_bloque,ii)) return false;
+        if(modo=='F'||modo=='f'){
+            //printf("mandado a escribir\n");
+            //printf("funcinsertando %s\n", newLine);
+            if(insertarFijo(newLine,ruta,nombre,lista_tamanos))
+                return 1;
+            //return 1;
+        }
+        //if(insertar(linea,tamano(linea),ruta,nombre))
+        //    return 1;
     }
     printf("[-] no se pudo insertar en el bloque %d\n",id_bloque);
     return 0;
      escribir(linea,0,0,0,0,nombre);
+}
+
+bool DiscoFisico::insertarFijo(char * str, char * ruta,char*nombre, int * lista_tamanos){
+    if(discoInicializado()){
+        printf("[-]Error al leer: no hay disco seleccionado \n");
+        return 0; 
+    }
+    //printf("funci insertar %s\n",ruta);
+    string rutta=ruta_base+"/"+ruta;
+    /* if(fs::file_size(ruta_base+"/"+ruta)+tamano(str) > tam_sector){
+        //printf("%s sin espacio\n",ruta);
+        return false;
+        } */
+    actualizarCabeceraFija((char*)rutta.c_str());
+    FILE * tmp=fopen(rutta.c_str(),"r");
+    char linea[200];
+    if(!fgets(linea,sizeof(linea),tmp)){
+        printf("error en acceder a cabecera\n");
+        return 0;
+    }
+    fclose(tmp);
+    printf("cabecera %s\n",linea);
+    linea[6]='\0';
+    printf("espacio %d\n",stoi(linea+4));
+    if(stoi(linea+4)==0){
+        printf("no hay espacio segun cabecera\n");
+        return false;
+    }
+
+    string ruta_escribir = ruta_base+"/"+ruta;
+    FILE * archivo = fopen(ruta_escribir.c_str(),"r+");
+    if(!archivo){
+        write(1,"Erro al insertar en ",20);
+        fclose(archivo);
+        return 0;
+    }
+    while(fgets(linea,sizeof(linea),archivo))
+        if (linea[0]=='-'){
+            fseek(archivo, -tamano(linea), SEEK_CUR);
+            fputs(str,archivo);
+            fclose(archivo);
+            actualizarCabeceraFija((char*)ruta_escribir.c_str());
+            printf("[+]registro fijo escrito en uno elimnado %s\n",ruta);
+            return 1;
+        }
+        
+        //printf("3insertando %s\n",str);
+    fputs(str,archivo);
+    //write(fileno(archivo),str,tamano(str)+1);
+    //printf("%s\n",str);
+    fclose(archivo);
+    actualizarCabeceraFija((char*)ruta_escribir.c_str());
+    printf("[+]registro fijo escrito en %s\n",ruta);
+    return 1;
+
 }
 
 bool DiscoFisico::insertar(char * str, int tam, char * ruta,char*nombre){
@@ -330,6 +566,7 @@ bool DiscoFisico::insertar(char * str, int tam, char * ruta,char*nombre){
     //printf("funci insertar %s\n",ruta);
 
     if(fs::file_size(ruta_base+"/"+ruta)+tamano(str) > tam_sector){
+        printf("no hay espacio\n");
         return false;
     }
     /* while(fs::file_size(ruta_base+"/"+ruta)+tamano(str) > tam_sector){
