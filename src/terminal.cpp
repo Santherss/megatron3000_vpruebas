@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <filesystem>
+#include "BufferManager.h"
+
+BufferManager * bufferManager;
 
 namespace fs = std::filesystem;
 
@@ -254,7 +257,7 @@ void extraerCampos(char *linea, char campos_extraidos[][100], int *num_campos) {
 }
 //!----------------------
 
-bool procesar_select(char *str, char *mayus, DiscoFisico *mydisk) {
+bool  procesar_select(char *str, char *mayus, DiscoFisico *mydisk) {
     int from_pos = buscar("FROM", mayus);
     if (from_pos == -1) {
         write(1, "Error: sintaxis incorrecta\n", 27);
@@ -406,15 +409,16 @@ bool procesar_select(char *str, char *mayus, DiscoFisico *mydisk) {
         if (imprimir && buffer[0] == '#') break;
         if (imprimir) {
             quitarEspacios(buffer);
-            for (int i=0;i<mydisk->tam_bloque;i++){
+            //for (int i=0;i<mydisk->tam_bloque;i++){
                 char ruta[20];
                 //printf("buffer %s",buffer);
-                mydisk->encontrarSector(ruta,stoi(buffer),i);
-                std::string datos_string = mydisk->leer(quitarEspacios(ruta));
-
+                //mydisk->encontrarSector(ruta,stoi(buffer),i);
+                //std::string datos_string = mydisk->leer(quitarEspacios(ruta));
+                std::string *datos_string = bufferManager->acceder(stoi(buffer), Operacion::Leer);
                 char datos[4096];
-                datos_string+="#";
-                strncpy(datos, datos_string.c_str(), sizeof(datos) - 1);
+                //*datos_string+="#";
+                std::string datos_con_extra = *datos_string + "#"; 
+                strncpy(datos, datos_con_extra.c_str(), sizeof(datos) - 1);
                 datos[sizeof(datos) - 1] = '\0';
 
                 char *linea_start = datos;
@@ -435,7 +439,6 @@ bool procesar_select(char *str, char *mayus, DiscoFisico *mydisk) {
                         for (int k = 0; k < n_indices; k++) {
                             int idx = indices_seleccionados[k];
                             if (idx >= 0 && idx < num_campos_linea) {
-                                
                                 if(cabecera||campos_linea[idx][0]=='-'){
                                     cabecera=true;
                                     break;
@@ -471,7 +474,9 @@ bool procesar_select(char *str, char *mayus, DiscoFisico *mydisk) {
                     }
                     linea_start = linea_end + 1;
                 }
-            }
+                //printf("****unpin %d\n",stoi(buffer));
+                bufferManager->unpin(stoi(buffer));
+            //}
         }
     }
 
@@ -596,15 +601,18 @@ bool procesar_eliminar(char * str, DiscoFisico * mydisc){
         
         if (encontrado) {
             quitarEspacios(buffer);
-            for (int i = 0; i < mydisc->tam_bloque; i++) {
-                mydisc->encontrarSector(ruta_datos, stoi(buffer), i);
-                std::string datos_string = mydisc->leer(quitarEspacios(ruta_datos));
+            //?for (int i = 0; i < mydisc->tam_bloque; i++) {
+                //if(!mydisc->encontrarSector(ruta_datos, stoi(buffer), i))
+                  //  break;
+                //std::string datos_string = mydisc->leer(quitarEspacios(ruta_datos));
+                std::string *datos_string = bufferManager->acceder(stoi(buffer),Operacion::Eliminar);
 
                 char datos[4096];
-                datos_string += "#";
-                strncpy(datos, datos_string.c_str(), sizeof(datos) - 1);
+                //datos_string += "#";
+                //strncpy(datos, datos_string.c_str(), sizeof(datos) - 1);
+                std::string datos_con_extra = *datos_string + "#"; 
+                strncpy(datos, datos_con_extra.c_str(), sizeof(datos) - 1);
                 datos[sizeof(datos) - 1] = '\0';
-
                 char *linea_start = datos;
                 char *linea_end;
                 std::string datos_modificados = "";
@@ -612,9 +620,10 @@ bool procesar_eliminar(char * str, DiscoFisico * mydisc){
                 while ((linea_end = strchr(linea_start, '\n')) != NULL) {
                     *linea_end = '\0';
 
-                    if (evaluarCondiciones(linea_start, condicion, campos, tipos, n_campos)) {
+                    if (campos[0][0]!='-' and evaluarCondiciones(linea_start, condicion, campos, tipos, n_campos)) {
                         // Marcar registro como eliminado sobrescribiendo el primer carácter con '-'
                         printf("elimando en %s\n",ruta_datos);
+                        bufferManager->high_dirty_bit(stoi(buffer));
                         std::string linea_eliminada = "-";
                         linea_eliminada += (linea_start + 1);  // Agregar el resto de la línea
                         datos_modificados += linea_eliminada + "\n";
@@ -626,20 +635,23 @@ bool procesar_eliminar(char * str, DiscoFisico * mydisc){
 
                     linea_start = linea_end + 1;
                 }
-
+                *datos_string = datos_modificados;
+                printf("--------------------\n%s",datos_string->c_str());
                 // Escribir los datos modificados usando FILE
+                /*
                 char ruta_completa[512];
                 strcpy(ruta_completa, ruta_base.c_str());
                 strcat(ruta_completa, "/");
                 strcat(ruta_completa, ruta_datos);
-                
                 FILE *archivo = fopen(ruta_completa, "w");
                 if (archivo) {
                     fputs(datos_modificados.c_str(), archivo);
                     fclose(archivo);
                     mydisc->actualizarCabeceraFija(ruta_completa);
-                }
-            }
+                }*/
+                //printf("pp\n");
+            //?}
+            bufferManager->unpin(stoi(buffer));
         }
     }
     printf("registros eliminados\n");
@@ -657,13 +669,16 @@ int procesar_consulta(char * str, DiscoFisico * mydisk){
     if (estaLiteral(mayus,palabras_salida)){ //salir
         mydisk->reporte();
         printf("\n[+] Saliendo...\n");
-
+        if(bufferManager)
+            delete bufferManager;
         return 0;
     }      
     
     if (buscar((char*)palabras_adicionales[2],mayus)==0){ // SELECT-DISCO
         //printf("%s",quitarEspacios(str+tamano((char *) palabras_adicionales[2])));
-        mydisk->inicializar(quitarEspacios(str+tamano((char *) palabras_adicionales[2])));
+        if( mydisk->inicializar(quitarEspacios(str+tamano((char *) palabras_adicionales[2]))))
+            bufferManager = new BufferManager(4,mydisk);
+
         //printf("selecionardiscosss\n");
         return 1;
     }
@@ -744,24 +759,22 @@ int procesar_consulta(char * str, DiscoFisico * mydisk){
         procesar_eliminar(str,mydisk);
         return 1;
     }
-
-    /* if(buscar("SET-BLOQUE", mayus)==0){ //setear el bloque  
-        if(discoInicializado()){
-            printf("[-]Error: no hay disco seleccionado \n");
-            return 1; 
+    
+    if(buscar("SET-BUFFER", mayus)==0){ //setear el bloque  
+        if (discoInicializado()){
+            printf("Disco no inicializado\n");
+            return 1;
         }
         int tam;
-        write(1,"tamano de bloque: ",18);
+        write(1,"tamano de buffer: ",18);
         scanf("%u", &tam);
         getchar();
-        if( tam%mydisk->tam_sector==0){ //es mutliplo
-            write(1,"[+] Tamano de bloque actualizado\n",33);
-            mydisk->tam_bloque=tam;
-        }else
-            write(1,"[-] tamano de bloque no correcto. Usa reporte\n",46);
-        
+        if(bufferManager)
+            delete bufferManager;
+        bufferManager = new BufferManager(tam,mydisk);
+
         return 1;
-    } */
+    } 
 
     if (buscar("INDICE",mayus)==0){
         if (discoInicializado()){
@@ -772,26 +785,129 @@ int procesar_consulta(char * str, DiscoFisico * mydisk){
         return 1; 
     }
 
-    if(buscar("BLOQUE",mayus)==0){
-        char id[10] = {0}; // Inicializar el array y hacerlo más grande
+    if(buscar("BLOQUE-BUFFER-PIN",mayus)==0){
+        char id[10] = {0}; 
         int idx=0;
-        str = str + tamano("bloque");
-        while(*str == ' ') str++; // Usar == en lugar de =
-        while (*(str+idx) && *(str+idx) != '\n' && *(str+idx) != ' '){ // Usar && en lugar de and
-            id[idx] = *(str+idx); // Corregir la indexación
+        str = str + tamano("bloque-buffer-pin");
+        while(*str == ' ') str++; 
+        while (*(str+idx) && *(str+idx) != '\n' && *(str+idx) != ' '){ 
+            id[idx] = *(str+idx); 
             idx++;
         }
-        id[idx] = '\0'; // Agregar terminador nulo
+        id[idx] = '\0'; 
+        printf("*****%s\n",id);
+        int num_id = stoi(id);
+        str+=idx;
+        while(*str == ' ') str++; 
+        char c= *str;
+        printf("oeracion %d -- %c\n",num_id,c);
+        Operacion ope;
+        if (c=='L')
+            ope = Operacion::Leer;
+        else if (c=='W')
+            ope= Operacion::Eliminar;
+        else{
+            printf("ingrese operacion correcta\n");
+            return 1;            
+        }
+        string* resultado= bufferManager->acceder(num_id,ope);
+        if (resultado==NULL){
+            return 1;
+        }
+        
+        printf("%s", resultado->c_str());
+        //bufferManager->unpin(num_id);
+        printf("PIN PERMANENETE\n");
+        return 1;
+    }
+
+    if(buscar("BLOQUE-BUFFER-UNPIN",mayus)==0){
+        char id[10] = {0}; 
+        int idx=0;
+        str = str + tamano("bloque-buffer-UNpin");
+        while(*str == ' ') str++; 
+        while (*(str+idx) && *(str+idx) != '\n' && *(str+idx) != ' '){ 
+            id[idx] = *(str+idx); 
+            idx++;
+        }
+        id[idx] = '\0'; 
+        int num_id = stoi(id);
+        str+=idx;
+        while(*str == ' ') str++; 
+        char c= *str;
+        printf("oeracion %d -- %c\n",num_id,c);
+        Operacion ope;
+        if (c=='L')
+            ope = Operacion::Leer;
+        else if (c=='W')
+            ope= Operacion::Eliminar;
+        else{
+            printf("ingrese operacion correcta\n");
+            return 1;            
+        }
+        printf("UNPIN del permaneten\n");
+
+        //printf("%s", bufferManager->acceder(num_id,ope)->c_str());
+        bufferManager->unpin(num_id);
+        return 1;
+    }
+
+    if(buscar("BLOQUE-BUFFER",mayus)==0){
+        char id[10] = {0}; 
+        int idx=0;
+        str = str + tamano("bloque-buffer");
+        while(*str == ' ') str++; 
+        while (*(str+idx) && *(str+idx) != '\n' && *(str+idx) != ' '){ 
+            id[idx] = *(str+idx); 
+            idx++;
+        }
+        id[idx] = '\0'; 
+        int num_id = stoi(id);
+        str+=idx;
+        while(*str == ' ') str++; 
+        char c= *str;
+        printf("oeracion con desfija automatico %d -- %c\n",num_id,c);
+        Operacion ope;
+        if (c=='L')
+            ope = Operacion::Leer;
+        else if (c=='W')
+            ope= Operacion::Eliminar;
+        else{
+            printf("ingrese operacion correcta\n");
+            return 1;            
+        }
+        
+        string* resultado= bufferManager->acceder(num_id,ope);
+        if (resultado==NULL){
+            return 1;
+        }
+        
+        printf("%s", resultado->c_str());
+        bufferManager->unpin(num_id);
+        return 1;
+    }
+
+    if(buscar("BLOQUE-DISCO",mayus)==0){
+        char id[10] = {0}; 
+        int idx=0;
+        str = str + tamano("bloque-DISCO");
+        while(*str == ' ') str++; 
+        while (*(str+idx) && *(str+idx) != '\n' && *(str+idx) != ' '){ 
+            id[idx] = *(str+idx); 
+            idx++;
+        }
+        id[idx] = '\0'; 
         int num_id = stoi(id);
         //printf("id %d\n", num_id);
         char ruta[20];
         for(int ii = 0; ii < mydisk->tam_bloque;ii++){
             if(!mydisk->encontrarSector(ruta,num_id,ii)) return false;
-            printf("BLOQUE %s\n%s\n",ruta, mydisk->leer(ruta).c_str());
+            printf("--sector: %s\n%s\n",ruta, mydisk->leer(ruta).c_str());
         }
         
         return 1;
     }
+    
     if(buscar("MOSTRAR",mayus)==0){
         char ruta[20];
         int num_id=0;
@@ -801,13 +917,49 @@ int procesar_consulta(char * str, DiscoFisico * mydisk){
                 if(!mydisk->encontrarSector(ruta,num_id,ii)) return 1;
                 capacidad+= fs::file_size(ruta_base+"/"+ ruta);
             }
-            printf("bloque %d - capacidad %d\n",num_id,capacidad);
+            printf("bloque %d - capacidad total %d - capacidad usada %d\n",num_id, mydisk->tam_bloque*mydisk->tam_sector,capacidad);
             num_id++;
         }
         return 1;
     }
 
+    if(buscar("BUFFER",mayus)==0){
+        bufferManager->ver_tabla();
+        return 1;
+    }
 
+    if(buscar("GUARDAR",mayus)==0){
+         char id[10] = {0}; 
+        int idx=0;
+        str = str + tamano("GUARDAR");
+        while(*str == ' ') str++; 
+        while (*(str+idx) && *(str+idx) != '\n' && *(str+idx) != ' '){ 
+            id[idx] = *(str+idx); 
+            idx++;
+        }
+        id[idx] = '\0'; 
+        int num_id = stoi(id);
+        bufferManager->guardar(num_id);
+        return 1;
+    }
+
+    if(buscar("ELIMINAR",mayus)==0){
+         char id[10] = {0}; 
+        int idx=0;
+        str = str + tamano("ELIMINAR");
+        while(*str == ' ') str++; 
+        while (*(str+idx) && *(str+idx) != '\n' && *(str+idx) != ' '){ 
+            id[idx] = *(str+idx); 
+            idx++;
+        }
+        id[idx] = '\0'; 
+        int num_id = stoi(id);
+        bufferManager->eliminar(num_id);
+        printf("[+] pagina %d elimanda",num_id);
+        return 1;
+    }
+
+    
     //if(buscar("TREE",mayus)==0){}
 
     write(1,"Consulta invalida usa HELP\n",27);
@@ -824,7 +976,8 @@ void terminal(){
     bool continuar = 1;
     bool disco = false;
     DiscoFisico * myDisk = new DiscoFisico();
-    myDisk->inicializar("default");
+    if(myDisk->inicializar("default"))
+        bufferManager = new BufferManager(4,myDisk);
     //myDisk->crear("d",3,3,3,500,3);
     //write(1,"\n",1);
     write(1,"Welcom to MEGATRON3000!!!\n->  ",30);

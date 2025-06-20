@@ -403,18 +403,25 @@ bool DiscoFisico::actualizarCabeceraFija(char * ruta){
 
         }
     }
-    bool encontrado= true;
-    int conta=1;
+    bool encontrado= false;
+    int conta=0;
+    fseek(archivo, 10, SEEK_SET);
     while(fgets(linea, sizeof(linea),archivo)){
         //printf("%s\n",linea);
-        if(linea[0]!='-')
+        if(linea[0]!='-'){
+            if (!encontrado){
+                encontrado= true;
+            }
             espacio-=tamano(linea,'\n');
+        }
         else{
             fseek(archivo, -tamano(linea), SEEK_CUR);
             fputs(to_string(conta).c_str(),archivo);
             fseek(archivo, +tamano(linea)-tamano((char*)to_string(conta).c_str()), SEEK_CUR);
+            break;
         }
-        conta++;
+        if(!encontrado)
+            conta++;
     }
     espacio/=++campo_tamano;
     if(espacio>999)
@@ -422,6 +429,8 @@ bool DiscoFisico::actualizarCabeceraFija(char * ruta){
     if(campo_tamano>999)
         campo_tamano=999;
         
+    if(!encontrado)
+        conta=0;
     fseek(archivo, 0, SEEK_SET);
     snprintf(newline, sizeof(newline), "%03d%03d%03d\n", campo_tamano, espacio,conta);
     fputs(newline,archivo);
@@ -723,4 +732,148 @@ void DiscoFisico::registrarRelacion(char *sector, char *nombre) {
     munmap(map, size + insercion_len);
     close(fd);
     //printf("Sector agregado en índice.\n");
+}
+
+
+void DiscoFisico::reemplazar(int id_bloque, string * contenido, bool es_insercion, char* nombre){
+    if (contenido == nullptr) {
+        printf("Error: contenido nulo para bloque %d\n", id_bloque);
+        return;
+    }
+    
+    if (discoInicializado()) {
+        printf("[-]Error al reemplazar: no hay disco seleccionado \n");
+        return;
+    }
+    
+    size_t tam_total_bloque = tam_bloque * tam_sector;
+    size_t contenido_total = contenido->length();
+    
+    printf("[+] %s contenido de %zu bytes comenzando en bloque %d\n", 
+           es_insercion ? "Insertando" : "Reemplazando", contenido_total, id_bloque);
+    
+    // Si el contenido cabe en un solo bloque, procesarlo normalmente
+    if (contenido_total <= tam_total_bloque) {
+        size_t offset = 0;
+        bool exito = true;
+        
+        // Distribuir el contenido entre todos los sectores del bloque
+        for (int i = 0; i < tam_bloque && offset < contenido_total; i++) {
+            char ruta[20];
+            
+            if (!encontrarSector(ruta, id_bloque, i)) {
+                printf("Error: no se pudo encontrar el sector %d del bloque %d\n", i, id_bloque);
+                exito = false;
+                break;
+            }
+            
+            // Construir ruta completa
+            string ruta_completa = ruta_base + "/" + string(ruta);
+            
+            // Calcular cuánto contenido escribir en este sector
+            size_t bytes_restantes = contenido_total - offset;
+            size_t bytes_a_escribir = (bytes_restantes > tam_sector) ? tam_sector : bytes_restantes;
+            
+            // Extraer la parte del contenido para este sector
+            string contenido_sector = contenido->substr(offset, bytes_a_escribir);
+            
+            // Escribir en el sector
+            FILE *archivo = fopen(ruta_completa.c_str(), "w");
+            if (archivo) {
+                fputs(contenido_sector.c_str(), archivo);
+                fclose(archivo);
+                
+                // Actualizar cabecera si es necesario
+                actualizarCabeceraFija((char*)ruta_completa.c_str());
+                
+                printf("[+] Sector %s actualizado (%zu bytes)\n", ruta, bytes_a_escribir);
+                offset += bytes_a_escribir;
+            } else {
+                printf("Error: no se pudo escribir en el sector %s\n", ruta);
+                perror("fopen");
+                exito = false;
+                break;
+            }
+        }
+        
+        // Limpiar sectores restantes del bloque si el contenido no los llenó todos
+        if (exito && offset < tam_total_bloque) {
+            for (int i = (offset / tam_sector) + ((offset % tam_sector) ? 1 : 0); i < tam_bloque; i++) {
+                char ruta[20];
+                
+                if (encontrarSector(ruta, id_bloque, i)) {
+                    string ruta_completa = ruta_base + "/" + string(ruta);
+                    
+                    // Limpiar el sector
+                    FILE *archivo = fopen(ruta_completa.c_str(), "w");
+                    if (archivo) {
+                        fclose(archivo);
+                        actualizarCabeceraFija((char*)ruta_completa.c_str());
+                        printf("[+] Sector %s limpiado\n", ruta);
+                    }
+                }
+            }
+        }
+        
+        // Registrar relación si es inserción y se proporcionó nombre
+        if (es_insercion && exito && nombre != nullptr) {
+            char str_bloque[20];
+            sprintf(str_bloque, "%d", id_bloque);
+            registrarRelacion(str_bloque, nombre);
+        }
+        
+        if (exito) {
+            printf("[+] Bloque %d %s correctamente (%zu bytes)\n", 
+                   id_bloque, es_insercion ? "insertado" : "reemplazado", contenido_total);
+        } else {
+            printf("[-] Error al %s el bloque %d\n", 
+                   es_insercion ? "insertar" : "reemplazar", id_bloque);
+        }
+    } 
+    else {
+        // El contenido excede el tamaño del bloque
+        printf("[+] Contenido excede el bloque (%zu > %zu bytes)\n", contenido_total, tam_total_bloque);
+        
+        // Procesar la primera parte en el bloque especificado
+        string primera_parte = contenido->substr(0, tam_total_bloque);
+        reemplazar(id_bloque, &primera_parte, es_insercion, nombre);
+        
+        // Para el contenido restante, usar las funciones existentes
+        string contenido_restante = contenido->substr(tam_total_bloque);
+        
+        if (es_insercion) {
+            // Usar la función insertar existente para el contenido excedente
+            printf("[+] Insertando contenido excedente (%zu bytes) usando función insertar\n", 
+                   contenido_restante.length());
+            
+            // Llamar a la función insertar que ya maneja la búsqueda de sectores libres
+            if (!insertar((char*)contenido_restante.c_str(), contenido_restante.length(), 
+                         0, 0, 0, 0, nombre)) {
+                printf("[-] Error al insertar contenido excedente\n");
+            }
+        } else {
+            // Para reemplazo, usar la función modificar en sectores consecutivos
+            printf("[+] Reemplazando contenido excedente (%zu bytes) en sectores consecutivos\n", 
+                   contenido_restante.length());
+            
+            // Calcular el siguiente bloque y usar modificar
+            int siguiente_bloque = id_bloque + 1;
+            
+            // Buscar el primer sector del siguiente bloque
+            char ruta_siguiente[20];
+            if (encontrarSector(ruta_siguiente, siguiente_bloque, 0)) {
+                // Parsear la ruta para obtener las coordenadas
+                unsigned int d, cara, p, s;
+                sscanf(ruta_siguiente, "%u/%u/%u/%u", &d, &cara, &p, &s);
+                
+                if (!modificar(contenido_restante, d, cara, p, s)) {
+                    printf("[-] Error al modificar contenido excedente\n");
+                }
+            } else {
+                printf("[-] No se pudo encontrar sector para contenido excedente\n");
+            }
+        }
+        
+        printf("[+] Operación de múltiples bloques completada\n");
+    }
 }

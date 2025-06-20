@@ -1,5 +1,6 @@
 #include "archivos.h"
 #include <string.h>
+#include "BufferManager.h"
 
 bool BloqueConEspacio(int id_bloque, DiscoFisico * mydisk){
     for (int i = 0; i < mydisk->tam_bloque; i++){
@@ -144,7 +145,6 @@ bool insertar_tabla(int cantidad,char *archivo, char separador, DiscoFisico *dis
     fclose(f);
     return true;
 }
-
 
 bool agregar_a_esquema(DiscoFisico *disk, char *nombre_tabla, char *  archivo,char sepa, char * cabecera_original) {
     FILE *f = fopen(archivo, "r");

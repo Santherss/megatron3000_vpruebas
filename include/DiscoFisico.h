@@ -41,7 +41,7 @@ public:
     /* void escribir_manual();
     void leer_manual();
     void modificar_manual(); */
-
+    void reemplazar(int id_bloque, string * contenido, bool es_insercion = false, char* nombre = nullptr);
 };
 
 bool discoInicializado();
