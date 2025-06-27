@@ -5,10 +5,15 @@
 
 DiscoFisico *discoUsado;
 //* ---------------------- Buffer Manager ----------------------
-BufferManager::BufferManager(int num_frames, DiscoFisico *mydisk)
+BufferManager::BufferManager(int num_frames, Politica poli, DiscoFisico *mydisk)
 {
-    this->buffer_pool = new BufferPool(num_frames);
+    this->buffer_pool = new BufferPool(num_frames, poli);
     discoUsado = mydisk;
+    printf("------------------\n");
+    printf("BUFFER MANAGER CREADO\n");
+    printf("# de frames = %d\n", num_frames);
+    printf("politica de reempazo = %s\n", poli == Politica::LRU ? "LRU" : "CLOCK");
+    printf("------------------\n");
 }
 
 BufferManager::~BufferManager()
@@ -24,7 +29,7 @@ string *BufferManager::acceder(int id_bloque, Operacion op)
     if (idx != -1)
     {
         // HIT: actualizar tiempo de uso
-        // buffer_pool->actualizar_tiempo_uso(idx);
+        buffer_pool->actualizar_tiempo_uso(idx);
         buffer_pool->incrementar_pin_count(idx);
         buffer_pool->incrementar_hit();
         buffer_pool->pin(idx);
@@ -58,7 +63,7 @@ void BufferPool::set_reference_bit(int idx, bool value)
 void BufferManager::ver_tabla()
 {
     //    ,is_pin?"true":"false",pin_count,last_used);
-    printf("|FrameId|PageId\t|Dirty Bit\t|is Pin\t|Pin Count\t|Last Used|Reference Bit|\n");
+    printf("|FrameId|PageId\t|Dirty Bit\t|is Pin\t|Pin Count\t|Last Used|Reference Bit|Modo\t|\n");
     buffer_pool->print();
     buffer_pool->print_hit_rate();
 }
@@ -91,7 +96,7 @@ void BufferManager::eliminar(int id)
 }
 
 //* ---------------------- Buffer Pool----------------------
-BufferPool::BufferPool(int num_frames)
+BufferPool::BufferPool(int num_frames, Politica poli)
 {
     listaBuffer = new Frame[num_frames];
     this->num_frames = num_frames;
@@ -99,7 +104,7 @@ BufferPool::BufferPool(int num_frames)
     num_miss = 0;
     tiempo_global = 0;
     clock_hand = 0;
-
+    politica = poli;
     for (int i = 0; i < num_frames; i++)
     {
         listaBuffer[i] = Frame(i);
@@ -142,43 +147,59 @@ void BufferPool::high_dirty_bit(int id)
 
 int BufferPool::tarjet_eliminar()
 {
-    /*     int lru_idx = -1;
+    if (politica == Politica::LRU)
+    {
+        int lru_idx = -1;
         int min_time;
         bool first_found = false;
 
-        for (int i = 0; i < num_frames; i++){
-            if(!listaBuffer[i].get_is_pin()){
-                if(!first_found){
+        for (int i = 0; i < num_frames; i++)
+        {
+            if (!listaBuffer[i].get_is_pin())
+            {
+                if (!first_found)
+                {
                     min_time = listaBuffer[i].get_last_used();
                     lru_idx = i;
                     first_found = true;
-                } else if(listaBuffer[i].get_last_used() < min_time){
+                }
+                else if (listaBuffer[i].get_last_used() < min_time)
+                {
                     min_time = listaBuffer[i].get_last_used();
                     lru_idx = i;
                 }
             }
         }
-        return lru_idx; */
-    //! CLOCK
-    while (true)
+        return lru_idx;
+    }
+    else if (politica == Politica::CLOCK)
     {
-        Frame &frame = listaBuffer[clock_hand];
-
-        if (!frame.get_is_pin())
+        while (true)
         {
-            if (frame.get_reference_bit())
-            {
-                frame.set_reference_bit(false);
-            }
-            else
-            {
-                int idx = clock_hand;
-                clock_hand = (clock_hand + 1) % num_frames;
-                return idx;
-            }
-        }
+            Frame &frame = listaBuffer[clock_hand];
 
-        clock_hand = (clock_hand + 1) % num_frames;
+            if (!frame.get_is_pin())
+            {
+                if (frame.get_reference_bit())
+                {
+                    printf("-- dando segunda oportunidad a la pagina %d\n", frame.get_id());
+                    frame.set_reference_bit(false);
+                }
+                else
+                {
+                    int idx = clock_hand;
+                    clock_hand = (clock_hand + 1) % num_frames;
+                    return idx;
+                }
+            }
+
+            clock_hand = (clock_hand + 1) % num_frames;
+        }
+    }
+    else
+    {
+        printf("[-] Error: no hay politica de reemplazo\n");
+        return 0;
     }
 }
 
@@ -233,7 +254,7 @@ int BufferPool::cargar_pagina(int id_bloque, Operacion op)
     // Cargar nueva página
     if (frame_idx != -1)
     {
-        Page *nueva_pagina = new Page(id_bloque);
+        Page *nueva_pagina = new Page(id_bloque, op);
 
         if (!listaBuffer[frame_idx].set_pagina(nueva_pagina))
             return -1;
@@ -289,6 +310,10 @@ void BufferPool::print()
 {
     for (int i = 0; i < num_frames; i++)
     {
+        //! clock
+        //        if (i == clock_hand)
+        if (politica == Politica::CLOCK)
+            printf(i == clock_hand ? "*" : " ");
         listaBuffer[i].ver_atributos();
     }
 }
@@ -324,12 +349,12 @@ void Frame::ver_atributos()
     // comenzamos despues del frame Id
     if (pagina == NULL)
     {
-        printf("|%d\t|-\t|---\t\t|---\t|\t-\t|\t-|\t-|\n", id);
+        printf("|%d\t|-\t|---\t\t|---\t|\t-\t|\t---|\t-\t|----\t|\n", id);
         return;
     }
-    printf("|%d\t|%d\t|%s\t\t|%s\t|\t%d\t|\t%d|\t%s\t|\n", id,
+    printf("|%d\t|%d\t|%s\t\t|%s\t|\t%d\t|\t%d|\t%s\t|%s\t|\n", id,
            pagina->get_id(), dirty_bit ? "true" : "false", is_pin ? "true" : "false",
-           pin_count, last_used, reference_bit ? "true" : "false");
+           pin_count, last_used, reference_bit ? "true" : "false", pagina->get_tipo_operacion());
 }
 
 int Frame::get_id()
@@ -422,9 +447,10 @@ void Frame::unpin()
 }
 
 //* ---------------------- Page ----------------------
-Page::Page(int id)
+Page::Page(int id, Operacion op)
 {
     this->page_id = id;
+    this->tipo_operacion = op;
     contenido = "";
     for (int i = 0; i < discoUsado->tam_bloque; i++)
     {
@@ -451,6 +477,28 @@ int Page::get_id()
 bool Page::valido()
 {
     return is_valido;
+}
+
+char *Page::get_tipo_operacion()
+{
+    switch (tipo_operacion)
+    {
+    case Operacion::Leer:
+        return "Leer";
+        break;
+
+    case Operacion::Insertar:
+        return "Modificar";
+        break;
+
+    case Operacion::Eliminar:
+        return "Modificar";
+        break;
+
+    default:
+        return "---";
+        break;
+    }
 }
 
 //* ---------------------- Generales----------------------

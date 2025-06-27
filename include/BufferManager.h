@@ -12,6 +12,12 @@ enum class Operacion
     Insertar
 };
 
+enum class Politica
+{
+    LRU,
+    CLOCK
+};
+
 class BufferManager;
 class BufferPool;
 class Frame;
@@ -25,7 +31,7 @@ private:
     BufferPool *buffer_pool;
 
 public:
-    BufferManager(int num_frames, DiscoFisico *mydisk);
+    BufferManager(int num_frames, Politica poli, DiscoFisico *mydisk);
     ~BufferManager();
     //
     string *acceder(int id_bloque, Operacion op);
@@ -48,9 +54,10 @@ private:
     int num_miss;
     int tiempo_global;
     int clock_hand;
+    Politica politica;
 
 public:
-    BufferPool(int num_frames);
+    BufferPool(int num_frames, Politica modo_politica);
     ~BufferPool();
     int buscar_pagina_id(int id);
     void print_hit_rate();
@@ -122,15 +129,17 @@ private:
     // FILE * bloque;
     int page_id;
     bool is_valido;
+    Operacion tipo_operacion;
 
 public:
     string contenido;
-    Page(int id);
+    Page(int id, Operacion op);
     ~Page();
     string leer();
     int get_id();
     void modificar();
     bool valido();
+    char *get_tipo_operacion();
 };
 
 #endif

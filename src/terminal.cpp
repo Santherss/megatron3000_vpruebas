@@ -815,7 +815,7 @@ int procesar_consulta(char *str, DiscoFisico *mydisk)
     { // SELECT-DISCO
         // printf("%s",quitarEspacios(str+tamano((char *) palabras_adicionales[2])));
         if (mydisk->inicializar(quitarEspacios(str + tamano((char *)palabras_adicionales[2]))))
-            bufferManager = new BufferManager(4, mydisk);
+            bufferManager = new BufferManager(4, Politica::CLOCK, mydisk);
 
         // printf("selecionardiscosss\n");
         return 1;
@@ -919,9 +919,14 @@ int procesar_consulta(char *str, DiscoFisico *mydisk)
         write(1, "tamano de buffer: ", 18);
         scanf("%u", &tam);
         getchar();
+        int ppoli;
+        printf("politica de reemplazo:\n1--LRU\notro--CLOCK\nopcion: ");
+        scanf("%u", &ppoli);
+        getchar();
+        Politica poli = ppoli == 1 ? Politica::LRU : Politica::CLOCK;
         if (bufferManager)
             delete bufferManager;
-        bufferManager = new BufferManager(tam, mydisk);
+        bufferManager = new BufferManager(tam, poli, mydisk);
 
         return 1;
     }
@@ -1161,7 +1166,7 @@ void terminal()
     bool disco = false;
     DiscoFisico *myDisk = new DiscoFisico();
     if (myDisk->inicializar("default"))
-        bufferManager = new BufferManager(4, myDisk);
+        bufferManager = new BufferManager(4, Politica::CLOCK, myDisk);
     // myDisk->crear("d",3,3,3,500,3);
     // write(1,"\n",1);
     write(1, "Welcom to MEGATRON3000!!!\n->  ", 30);
