@@ -152,7 +152,6 @@ int BufferPool::tarjet_eliminar()
         int lru_idx = -1;
         int min_time;
         bool first_found = false;
-
         for (int i = 0; i < num_frames; i++)
         {
             if (!listaBuffer[i].get_is_pin())
@@ -177,7 +176,6 @@ int BufferPool::tarjet_eliminar()
         while (true)
         {
             Frame &frame = listaBuffer[clock_hand];
-
             if (!frame.get_is_pin())
             {
                 if (frame.get_reference_bit())
@@ -185,14 +183,13 @@ int BufferPool::tarjet_eliminar()
                     printf("-- dando segunda oportunidad a la pagina %d\n", frame.get_id());
                     frame.set_reference_bit(false);
                 }
-                else
+                else if (!frame.get_is_pin())
                 {
                     int idx = clock_hand;
                     clock_hand = (clock_hand + 1) % num_frames;
                     return idx;
                 }
             }
-
             clock_hand = (clock_hand + 1) % num_frames;
         }
     }
