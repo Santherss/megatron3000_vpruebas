@@ -1,54 +1,76 @@
-#ifndef BUFFERMANAGER
-#define BUFFERMANAGER
+#ifndef BUFFERMANAGER_H
+#define BUFFERMANAGER_H
+
 #include <string>
 #include <stdio.h>
+#include <queue>
+#include <vector>
+#include <algorithm>
 #include "DiscoFisico.h"
+
 using namespace std;
 
-enum class Operacion
-{
-    Leer,
-    Eliminar,
-    Insertar
+// --- ENUMS Y ESTRUCTURAS AUXILIARES ---
+enum class Operacion { Leer, Escribir, Eliminar, Insertar };
+enum class Politica { LRU, CLOCK };
+
+struct CandidatoLRU {
+    int frame_id;
+    int last_used;
 };
 
-enum class Politica
-{
-    LRU,
-    CLOCK
-};
-
+// --- DECLARACIONES DE CLASES ---
 class BufferManager;
 class BufferPool;
 class Frame;
 class Page;
 
-//* ---------------------- Buffer Manager ----------------------
-
-class BufferManager
-{
+// ======================================================
+// Frame: La base con la nueva lógica de procesos
+// ======================================================
+class Frame {
 private:
-    BufferPool *buffer_pool;
+    int id;
+    Page* pagina;
+    bool dirty_bit;
+    int last_used;
+    bool reference_bit;
+    std::queue<Operacion> procesos; // <-- La nueva fuente de verdad
 
 public:
-    BufferManager(int num_frames, Politica poli, DiscoFisico *mydisk);
-    ~BufferManager();
-    //
-    string *acceder(int id_bloque, Operacion op);
-    void ver_tabla();
-    void high_dirty_bit(int id);
-    void pin(int id);
-    void unpin(int id);
-    void guardar(int id);
-    void eliminar(int id);
+    Frame(int i);
+    Frame();
+    ~Frame();
+
+    void ver_atributos();
+    int get_id();
+    string* get_puntero();
+    bool set_pagina(Page* p);
+    void reset_frame();
+    
+    // Getters y Setters de metadatos
+    bool get_dirty_bit();
+    int get_last_used();
+    bool get_reference_bit();
+    void set_last_used(int time);
+    void set_reference_bit(bool value);
+    void high_dirty_bit();
+    void low_dirty_bit();
+    
+    // Interfaz de gestión de procesos
+    void agregar_proceso(Operacion op);
+    void terminar_proceso_antiguo();
+    int get_pin_count();
+    bool get_is_pin();
+    string get_procesos_str();
 };
 
-//* ---------------------- Buffer Pool----------------------
-
-class BufferPool
-{
+// ======================================================
+// BufferPool: Interfaz pública actualizada
+// ======================================================
+class BufferPool {
 private:
-    Frame *listaBuffer;
+    Frame* listaBuffer;
     int num_frames;
     int num_hit;
     int num_miss;
@@ -59,87 +81,65 @@ private:
 public:
     BufferPool(int num_frames, Politica modo_politica);
     ~BufferPool();
+    
     int buscar_pagina_id(int id);
+    string* get_puntero(int idx);
+    void print();
     void print_hit_rate();
-    void high_dirty_bit(int);
-    string *get_puntero(int idx);
-    void pin(int id);
-    void unpin(int id);
-    void guardar(int idx);
-
+    
+    void incrementar_hit();
     void incrementar_miss();
-    void set_last_used(int time);
-    void set_pagina(Page *p);
-    void reset_frame();
+    
+    void high_dirty_bit(int id);
+    void guardar(int idx);
+    void eliminar(int idx);
+    
     int cargar_pagina(int id_bloque, Operacion op);
     int buscar_frame_libre();
-    void actualizar_tiempo_uso(int idx);
-    void incrementar_hit();
-    void incrementar_pin_count(int idx);
     int tarjet_eliminar();
-    void eliminar(int idx);
-    void print();
 
+    void actualizar_tiempo_uso(int idx);
     void set_reference_bit(int idx, bool value);
+
+    // Nueva interfaz para manejar procesos
+    void agregar_proceso_a_pagina(int idx, Operacion op);
+    void terminar_proceso_de_pagina(int id_pagina);
 };
 
-//* ---------------------- Frame ----------------------
-
-class Frame
-{
+// ======================================================
+// BufferManager: Interfaz para el simulador
+// ======================================================
+class BufferManager {
 private:
-    int id;
-    Page *pagina;
-    int pin_count;
-    bool dirty_bit;
-    bool is_pin;
-    int last_used;
-    bool reference_bit;
+    BufferPool* buffer_pool;
 
 public:
-    Frame(int i);
-    Frame();
-    ~Frame();
-    void ver_atributos();
-    int get_id();
-    string *get_puntero();
-    // eliminación
-    bool get_is_pin();
-    bool get_dirty_bit();
-    int get_last_used();
-    void reset_frame();
-    void set_last_used(int time);
-    bool set_pagina(Page *p);
-    void incrementar_pin_count();
-    void high_dirty_bit();
-    void low_dirty_bit();
-    void pin();
-    void unpin();
+    BufferManager(int num_frames, Politica poli, DiscoFisico *mydisk);
+    ~BufferManager();
+    
+    string* acceder(int id_bloque, Operacion op);
+    void ver_tabla();
 
-    bool get_reference_bit();
-    void set_reference_bit(bool value);
+    // Interfaz pública para control manual desde terminal.cpp
+    void terminar_proceso_manual(int id_bloque);
+    
+    BufferPool* get_buffer_pool();
 };
 
-//* ---------------------- Page ----------------------
-
-class Page
-{
+// ======================================================
+// Page
+// ======================================================
+class Page {
 private:
-    // string ruta;
-    // FILE * bloque;
     int page_id;
     bool is_valido;
-    Operacion tipo_operacion;
 
 public:
     string contenido;
-    Page(int id, Operacion op);
+    Page(int id);
     ~Page();
-    string leer();
     int get_id();
-    void modificar();
     bool valido();
-    char *get_tipo_operacion();
 };
 
 #endif
