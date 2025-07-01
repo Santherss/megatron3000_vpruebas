@@ -587,9 +587,6 @@ bool procesar_select(char *str, char *mayus, DiscoFisico *mydisk)
                 }
                 linea_start = linea_end + 1;
             }
-            // printf("****unpin %d\n",stoi(buffer));
-            bufferManager->unpin(stoi(buffer));
-            //}
         }
     }
 
@@ -757,7 +754,7 @@ bool procesar_eliminar(char *str, DiscoFisico *mydisc)
                 {
                     // Marcar registro como eliminado sobrescribiendo el primer carácter con '-'
                     printf("elimando en %s\n", ruta_datos);
-                    bufferManager->high_dirty_bit(stoi(buffer));
+                    // acceder() ya realiza esa accion bufferManager->high_dirty_bit(stoi(buffer));
                     std::string linea_eliminada = "-";
                     linea_eliminada += (linea_start + 1); // Agregar el resto de la línea
                     datos_modificados += linea_eliminada + "\n";
@@ -787,7 +784,6 @@ bool procesar_eliminar(char *str, DiscoFisico *mydisc)
             }*/
             // printf("pp\n");
             //?}
-            bufferManager->unpin(stoi(buffer));
         }
     }
     printf("registros eliminados\n");
@@ -979,8 +975,8 @@ int procesar_consulta(char *str, DiscoFisico *mydisk)
         }
 
         printf("%s", resultado->c_str());
-        // bufferManager->unpin(num_id);
         printf("PIN PERMANENETE\n");
+        
         return 1;
     }
 
@@ -1016,7 +1012,7 @@ int procesar_consulta(char *str, DiscoFisico *mydisk)
         printf("UNPIN del permaneten\n");
 
         // printf("%s", bufferManager->acceder(num_id,ope)->c_str());
-        bufferManager->unpin(num_id);
+        bufferManager->terminar_proceso_manual(num_id);
         return 1;
     }
 
@@ -1057,7 +1053,6 @@ int procesar_consulta(char *str, DiscoFisico *mydisk)
         }
 
         printf("%s", resultado->c_str());
-        bufferManager->unpin(num_id);
         return 1;
     }
 
@@ -1112,41 +1107,28 @@ int procesar_consulta(char *str, DiscoFisico *mydisk)
         return 1;
     }
 
-    if (buscar("GUARDAR", mayus) == 0)
+     if (buscar("TERMINAR-PROCESO", mayus) == 0) 
     {
-        char id[10] = {0};
-        int idx = 0;
-        str = str + tamano("GUARDAR");
-        while (*str == ' ')
-            str++;
-        while (*(str + idx) && *(str + idx) != '\n' && *(str + idx) != ' ')
-        {
-            id[idx] = *(str + idx);
-            idx++;
-        }
-        id[idx] = '\0';
-        int num_id = stoi(id);
-        bufferManager->guardar(num_id);
-        return 1;
-    }
+        char id_str[10] = {0};
+        // sscanf es una forma fácil de parsear el comando "COMANDO ID"
+        sscanf(str, "%*s %s", id_str); 
+        
+        int id_bloque = atoi(id_str); // Convierte el texto del ID a un número
 
-    if (buscar("ELIMINAR", mayus) == 0)
-    {
-        char id[10] = {0};
-        int idx = 0;
-        str = str + tamano("ELIMINAR");
-        while (*str == ' ')
-            str++;
-        while (*(str + idx) && *(str + idx) != '\n' && *(str + idx) != ' ')
-        {
-            id[idx] = *(str + idx);
-            idx++;
+        if (id_bloque == 0 && id_str[0] != '0') {
+            printf("Error: ID de bloque inválido o no proporcionado.\n");
+            return 1;
         }
-        id[idx] = '\0';
-        int num_id = stoi(id);
-        bufferManager->eliminar(num_id);
-        printf("[+] pagina %d elimanda", num_id);
-        return 1;
+
+        printf("Terminando proceso más antiguo de la página %d...\n", id_bloque);
+        
+        // Llama a la función que implementaste en BufferManager
+        bufferManager->terminar_proceso_manual(id_bloque);
+        
+        // Opcional: Muestra el estado del buffer para ver el resultado inmediatamente
+        bufferManager->ver_tabla();
+
+        return 1; // Para continuar el bucle de la terminal
     }
 
     // if(buscar("TREE",mayus)==0){}
